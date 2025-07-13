@@ -3,7 +3,7 @@
 set program=ember.exe
 set bin_dir=.\bin\
 set lnk_dir=.\obj\
-set defines=/DDEBUG
+set defines=/DDEBUG /DPLATFORM_WINDOWS /DEMBER_ASSERT_ENABLED
 set options=/W4 /Zi /Fe%bin_dir%%program% /Fo:%lnk_dir% %defines%
 
 if not exist %bin_dir% mkdir %bin_dir%
