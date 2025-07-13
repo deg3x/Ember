@@ -2,4 +2,4 @@
 #include <stdint.h>
 
 #include "engine_defs.c"
-#include "main.c"
+#include "platform/build_platform.c"
