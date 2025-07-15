@@ -8,10 +8,10 @@ typedef int16_t i16_t;
 typedef int32_t i32_t;
 typedef int64_t i64_t;
 
-typedef i8_t  b8_t;
-typedef i16_t b16_t;
-typedef i32_t b32_t;
-typedef i64_t b64_t;
+typedef i8_t  bool_t;
+
+#define TRUE  1
+#define FALSE 0
 
 typedef float  f32_t;
 typedef double f64_t;
