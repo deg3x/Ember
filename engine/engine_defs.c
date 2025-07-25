@@ -24,6 +24,8 @@ typedef double f64_t;
 #define GB(n) (((u64_t)n) << 30)
 #define TB(n) (((u64_t)n) << 40)
 
+#define ARENA_FREE_LIST 1
+
 #if defined(_MSC_VER)
     #define DEBUG_BREAK() __debugbreak()
 #elif defined(__clang__) || defined(__gcc__)
