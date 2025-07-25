@@ -11,11 +11,12 @@ struct win32_gfx_state_t
     HINSTANCE instance;
 };
 
-win32_gfx_state_t g_win32_gfx_state = {};
+global win32_gfx_state_t g_win32_gfx_state = {};
 
-LRESULT CALLBACK win32_window_message_callback(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param);
+internal LRESULT CALLBACK win32_window_message_callback(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param);
 
-void platform_info_init()
+internal void
+platform_info_init()
 {
     SYSTEM_INFO system_info;
     GetSystemInfo(&system_info);
@@ -26,19 +27,22 @@ void platform_info_init()
     g_platform_info.alloc_granularity = system_info.dwAllocationGranularity;
 }
 
-void platform_abort(i32_t exit_code)
+internal void
+platform_abort(i32_t exit_code)
 {
     ExitProcess(exit_code);
 }
 
-void* platform_mem_reserve(u64_t size)
+internal void*
+platform_mem_reserve(u64_t size)
 {
     void* result = VirtualAlloc(NULL, size, MEM_RESERVE, PAGE_READWRITE);
 
     return result;
 }
 
-void* platform_mem_reserve_large(u64_t size)
+internal void*
+platform_mem_reserve_large(u64_t size)
 {
     // Windows requires large pages to be committed on reserve
     void* result = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
@@ -46,30 +50,35 @@ void* platform_mem_reserve_large(u64_t size)
     return result;
 }
 
-b32_t platform_mem_commit(void* ptr, u64_t size)
+internal b32_t
+platform_mem_commit(void* ptr, u64_t size)
 {
     b32_t result = (b32_t)(VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE) != 0);
 
     return result;
 }
 
-b32_t platform_mem_commit_large(void* ptr, u64_t size)
+internal b32_t
+platform_mem_commit_large(void* ptr, u64_t size)
 {
     return TRUE;
 }
 
-void platform_mem_release(void* ptr, u64_t size)
+internal void
+platform_mem_release(void* ptr, u64_t size)
 {
     // Windows requires size to be 0 for release
     VirtualFree(ptr, 0, MEM_RELEASE);
 }
 
-void platform_mem_decommit(void* ptr, u64_t size)
+internal void
+platform_mem_decommit(void* ptr, u64_t size)
 {
     VirtualFree(ptr, size, MEM_DECOMMIT);
 }
 
-void platform_gfx_init()
+internal void
+platform_gfx_init()
 {
     g_win32_gfx_state.instance = GetModuleHandle(NULL);
 
@@ -91,7 +100,8 @@ void platform_gfx_init()
     (void)atom;
 }
 
-platform_handle_t platform_gfx_window_create(const char* window_name)
+internal platform_handle_t
+platform_gfx_window_create(const char* window_name)
 {
     win32_window_t window = {};
 
@@ -122,7 +132,8 @@ platform_handle_t platform_gfx_window_create(const char* window_name)
     return handle;
 }
 
-b32_t platform_gfx_process_events()
+internal b32_t
+platform_gfx_process_events()
 {
     MSG msg = {};
 
@@ -137,7 +148,8 @@ b32_t platform_gfx_process_events()
     return TRUE;
 }
 
-LRESULT CALLBACK win32_window_message_callback(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param)
+internal LRESULT CALLBACK
+win32_window_message_callback(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param)
 {
     switch (msg)
     {

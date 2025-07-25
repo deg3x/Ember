@@ -13,16 +13,19 @@ typedef i16_t  b16_t;
 typedef i32_t  b32_t;
 typedef i64_t  b64_t;
 
-#define TRUE  1
-#define FALSE 0
-
 typedef float  f32_t;
 typedef double f64_t;
+
+#define TRUE  1
+#define FALSE 0
 
 #define KB(n) (((u64_t)n) << 10)
 #define MB(n) (((u64_t)n) << 20)
 #define GB(n) (((u64_t)n) << 30)
 #define TB(n) (((u64_t)n) << 40)
+
+#define global   static
+#define internal static
 
 #define ARENA_FREE_LIST 1
 
