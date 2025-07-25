@@ -2,5 +2,5 @@
 #include <stdint.h>
 
 #include "engine_defs.c"
-#include "memory/arena.c"
 #include "platform/build_platform.c"
+#include "memory/arena.c"

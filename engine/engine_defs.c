@@ -27,6 +27,10 @@ typedef double f64_t;
 #define global   static
 #define internal static
 
+#define POW_2_CHECK(v)         ((v)!=0 && ((v) & ((v) - 1))==0)
+#define POW_2_ROUND_UP(v, a)   (((v) + (a) - 1) & (~((a) - 1)))
+#define POW_2_ROUND_DOWN(v, a) ((v) & (~((a) - 1)))
+
 #define ARENA_FREE_LIST 1
 
 #if defined(_MSC_VER)
