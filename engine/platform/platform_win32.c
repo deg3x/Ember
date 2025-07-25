@@ -82,7 +82,7 @@ win32_window_t win32_window_create(HINSTANCE instance, const char* window_name)
     return window;
 }
 
-bool_t win32_window_process_events()
+b8_t win32_window_process_events()
 {
     MSG msg = {};
 
