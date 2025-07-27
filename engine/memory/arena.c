@@ -1,11 +1,10 @@
-#define ARENA_HEADER_SIZE 128 
+#define ARENA_HEADER_SIZE 64 
 
 // Hard typed enum size
 typedef u64_t arena_flags_t;
 enum
 {
-    ARENA_FLAGS_no_chain    = (1 << 0),
-    ARENA_FLAGS_large_pages = (1 << 1),
+    ARENA_FLAGS_large_pages = (1 << 0),
 };
 
 typedef struct arena_params_t arena_params_t;
@@ -19,24 +18,14 @@ struct arena_params_t
 typedef struct arena_t arena_t;
 struct arena_t
 {
-    arena_t* prev;
-    arena_t* curr;
-#if ARENA_FREE_LIST
-    arena_t* free_last;
-    u64_t free_size;
-#endif
-    u64_t size_res_req;
-    u64_t size_cmt_req;
     u64_t size_res;
     u64_t size_cmt;
-    u64_t pos_base;
-    u64_t pos_curr;
+    u64_t position;
     arena_flags_t flags;
 };
 
 internal arena_t* arena_init(arena_params_t* params);
-internal u64_t    arena_position(arena_t* arena);
-internal void     arena_push(arena_t* arena, u64_t size, u64_t align);
+internal void*    arena_push(arena_t* arena, u64_t size, u64_t align);
 internal void     arena_pop(arena_t* arena, u64_t size);
 internal void     arena_pop_to(arena_t* arena, u64_t pos);
 internal void     arena_clear(arena_t* arena);
@@ -78,20 +67,74 @@ arena_init(arena_params_t* params)
         platform_abort(1);
     }
 
-    arena_t* result      = (arena_t*)address;
-    result->curr         = result;
-    result->prev         = NULL;
-    result->size_res_req = params->size_reserve;
-    result->size_cmt_req = params->size_commit;
-    result->size_res     = reserve;
-    result->size_cmt     = commit;
-    result->pos_base     = 0;
-    result->pos_curr     = ARENA_HEADER_SIZE;
-    result->flags        = params->flags;
-#if ARENA_FREE_LIST
-    result->free_last    = NULL;
-    result->free_size    = 0;
-#endif
+    arena_t* result  = (arena_t*)address;
+    result->size_res = reserve;
+    result->size_cmt = commit;
+    result->position = ARENA_HEADER_SIZE;
+    result->flags    = params->flags;
 
     return result;
 }
+
+internal void*
+arena_push(arena_t* arena, u64_t size, u64_t align)
+{
+    u64_t pos_start = POW_2_ROUND_UP(arena->position, align);
+    u64_t pos_goal  = POW_2_ROUND_UP(pos_start + size, align);
+
+    EMBER_ASSERT(arena->size_res >= pos_goal);
+
+    if (arena->size_cmt < pos_goal)
+    {
+        u64_t commit = CLAMP_TOP(pos_goal, arena->size_res);
+        commit      -= arena->size_cmt;
+
+        if (arena->flags & ARENA_FLAGS_large_pages)
+        {
+            commit = POW_2_ROUND_UP(commit, g_platform_info.page_size_large);
+            platform_mem_commit_large(arena, commit);
+        }
+        else
+        {
+            commit = POW_2_ROUND_UP(commit, g_platform_info.page_size);
+            platform_mem_commit(arena, commit);
+        }
+
+        pos_goal        = commit;
+        arena->size_cmt = commit;
+    }
+
+    u8_t* result    = (u8_t*)arena + arena->position;
+    arena->position = pos_goal;
+
+    return result;
+}
+
+internal void
+arena_pop(arena_t* arena, u64_t size)
+{
+    EMBER_ASSERT(arena->position >= size);
+
+    arena->position -= size;
+}
+
+internal void
+arena_pop_to(arena_t* arena, u64_t pos)
+{
+    EMBER_ASSERT(arena->position >= pos);
+
+    arena->position = pos;
+}
+
+internal void
+arena_clear(arena_t* arena)
+{
+    arena_pop_to(arena, 0);
+}
+
+internal void
+arena_release(arena_t* arena)
+{
+    platform_mem_release(arena, arena->size_res);
+}
+

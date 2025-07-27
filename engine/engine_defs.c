@@ -31,6 +31,12 @@ typedef double f64_t;
 #define POW_2_ROUND_UP(v, a)   (((v) + (a) - 1) & (~((a) - 1)))
 #define POW_2_ROUND_DOWN(v, a) ((v) & (~((a) - 1)))
 
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+
+#define CLAMP_TOP(a, b) MIN(a, b)
+#define CLAMP_BOT(a, b) MAX(a, b)
+
 #define ARENA_FREE_LIST 1
 
 #if defined(_MSC_VER)
