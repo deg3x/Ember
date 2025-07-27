@@ -1,8 +1,23 @@
-#include "platform.c"
+/////////////
+// H_FILES
+
+#include "platform.h"
 
 #if defined(PLATFORM_WINDOWS)
     #include <windows.h>
-    #include "platform_win32.c"
+    #include "win32/platform_win32.h"
 #else
     #error Platform not supported.
 #endif
+
+/////////////
+// C_FILES
+
+#include "platform.c"
+
+#if defined(PLATFORM_WINDOWS)
+    #include "win32/platform_win32.c"
+#else
+    #error Platform not supported.
+#endif
+
