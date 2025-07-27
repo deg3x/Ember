@@ -34,4 +34,4 @@ internal void     arena_pop_to(arena_t* arena, u64_t pos);
 internal void     arena_clear(arena_t* arena);
 internal void     arena_release(arena_t* arena);
 
-#endif
+#endif // ARENA_H

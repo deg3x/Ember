@@ -18,4 +18,4 @@ global win32_gfx_state_t g_win32_gfx_state = {};
 
 internal LRESULT CALLBACK win32_window_message_callback(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_param);
 
-#endif
+#endif // PLATFORM_WIN32_H

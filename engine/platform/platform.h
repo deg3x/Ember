@@ -34,4 +34,4 @@ internal void              platform_gfx_init();
 internal b32_t             platform_gfx_process_events();
 internal platform_handle_t platform_gfx_window_create(const char* title);
 
-#endif
+#endif // PLATFORM_H

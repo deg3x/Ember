@@ -1,3 +1,6 @@
+#ifndef ENGINE_DEFS_H
+#define ENGINE_DEFS_H
+
 typedef uint8_t  u8_t;
 typedef uint16_t u16_t;
 typedef uint32_t u32_t;
@@ -77,3 +80,5 @@ void assert_fail(const char* expression, const char* message, const char* file, 
 #define EMBER_ASSERT(expr)
 #define EMBER_ASSERT_MSG(expr, msg)
 #endif
+
+#endif // ENGINE_DEFS_H
