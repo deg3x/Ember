@@ -7,6 +7,7 @@
 
 #include "engine_defs.h"
 #include "math/math_core.h"
+#include "math/vector.h"
 #include "memory/arena.h"
 
 /////////////
@@ -14,4 +15,5 @@
 
 #include "platform/build_platform.c"
 #include "math/math_core.c"
+#include "math/vector.c"
 #include "memory/arena.c"
