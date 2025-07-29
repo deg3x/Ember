@@ -259,7 +259,9 @@ vec2_length(vec2_t* vector)
     f32_t x_sqr = vector->x * vector->x;
     f32_t y_sqr = vector->y * vector->y;
 
-    return math_sqrt(x_sqr + y_sqr);
+    f32_t result = math_sqrt(x_sqr + y_sqr);
+
+    return result;
 }
 
 internal f32_t
@@ -269,7 +271,9 @@ vec3_length(vec3_t* vector)
     f32_t y_sqr = vector->y * vector->y;
     f32_t z_sqr = vector->z * vector->z;
 
-    return math_sqrt(x_sqr + y_sqr + z_sqr);
+    f32_t result = math_sqrt(x_sqr + y_sqr + z_sqr);
+
+    return result;
 }
 
 internal f32_t
@@ -280,7 +284,9 @@ vec4_length(vec4_t* vector)
     f32_t z_sqr = vector->z * vector->z;
     f32_t w_sqr = vector->w * vector->w;
 
-    return math_sqrt(x_sqr + y_sqr + z_sqr + w_sqr);
+    f32_t result = math_sqrt(x_sqr + y_sqr + z_sqr + w_sqr);
+
+    return result;
 }
 
 internal f32_t

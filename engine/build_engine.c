@@ -8,6 +8,8 @@
 #include "engine_defs.h"
 #include "math/math_core.h"
 #include "math/vector.h"
+#include "math/matrix.h"
+#include "math/quaternion.h"
 #include "memory/arena.h"
 
 /////////////
@@ -16,4 +18,6 @@
 #include "platform/build_platform.c"
 #include "math/math_core.c"
 #include "math/vector.c"
+#include "math/matrix.c"
+#include "math/quaternion.c"
 #include "memory/arena.c"
