@@ -27,7 +27,7 @@ platform_mem_reserve(u64_t size)
 internal void*
 platform_mem_reserve_large(u64_t size)
 {
-    // Windows requires large pages to be committed on reserve
+    // NOTE(KB): Windows requires large pages to be committed on reserve
     void* result = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
 
     return result;
@@ -50,7 +50,7 @@ platform_mem_commit_large(void* ptr, u64_t size)
 internal void
 platform_mem_release(void* ptr, u64_t size)
 {
-    // Windows requires size to be 0 for release
+    // NOTE(KB): Windows requires size to be 0 for release
     VirtualFree(ptr, 0, MEM_RELEASE);
 }
 

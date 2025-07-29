@@ -133,9 +133,15 @@ union quat_t
     f32_t data[4];
 };
 
-typedef struct mat4_t mat4_t;
-struct mat4_t
+// NOTE(KB): Matrices are stored in a column-first order
+typedef union mat4_t mat4_t;
+union mat4_t
 {
+    struct
+    {
+        vec4_t cols[4];
+    };
+
     f32_t m[4][4];
 };
 

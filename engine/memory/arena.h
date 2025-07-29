@@ -3,7 +3,7 @@
 
 #define ARENA_HEADER_SIZE 64 
 
-// Hard typed enum size
+// NOTE(KB): Hard-typed enum size
 typedef u64_t arena_flags_t;
 enum
 {
