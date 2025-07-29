@@ -206,7 +206,7 @@ mat4_from_euler(vec3_t* angles)
     f32_t cos_z = math_cos(angles->z);
     f32_t sin_x = math_sin(angles->x);
     f32_t sin_y = math_sin(angles->y);
-    f32_t sin_z = math_sin(angles->w);
+    f32_t sin_z = math_sin(angles->z);
 
     mat4_t result = {};
 
@@ -239,8 +239,8 @@ mat4_from_pitch(f32_t pitch)
     result.m[1][2] =  angle_sin;
     result.m[2][1] = -angle_sin;
     result.m[2][2] =  angle_cos;
-    result.m[0][0] =  0.0f;
-    result.m[3][3] =  0.0f;
+    result.m[0][0] =  1.0f;
+    result.m[3][3] =  1.0f;
 
     return result;
 }
@@ -399,8 +399,7 @@ mat4_scale(vec3_t* scale)
 internal mat4_t
 mat4_model(vec3_t* position, quat_t* rotation, vec3_t* scale)
 {
-    vec3_t rot_euler = quat_to_euler(rotation);
-    mat4_t rot_matrix = mat4_from_euler(&rot_euler);
+    mat4_t rot_matrix = mat4_from_quaternion(rotation);
     mat4_t scale_matrix = mat4_scale(scale);
 
     mat4_t result = mat4_translation(position);
