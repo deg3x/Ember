@@ -1,20 +1,6 @@
 #ifndef QUATERNION_H
 #define QUATERNION_H
 
-typedef union quat_t quat_t;
-union quat_t
-{
-    struct
-    {
-        f32_t x;
-        f32_t y;
-        f32_t z;
-        f32_t w;
-    };
-
-    f32_t q[4];
-};
-
 internal quat_t quat_normalize(quat_t* quat);
 internal quat_t quat_renormalize(quat_t* quat);
 

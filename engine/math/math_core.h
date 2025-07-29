@@ -46,6 +46,104 @@
 #define math_ceil(v)     ceilf(v)
 #define math_floor(v)    floorf(v)
 
+///////////
+// TYPES
+
+#pragma warning(push)
+#pragma warning(disable: 4201)
+
+typedef union vec2_t vec2_t;
+union vec2_t
+{
+    struct
+    {
+        f32_t x;
+        f32_t y;
+    };
+
+    struct
+    {
+        f32_t u;
+        f32_t v;
+    };
+
+    f32_t data[2];
+};
+
+typedef union vec3_t vec3_t;
+union vec3_t
+{
+    struct
+    {
+        f32_t x;
+        f32_t y;
+        f32_t z;
+    };
+
+    struct
+    {
+        f32_t r;
+        f32_t g;
+        f32_t b;
+    };
+
+    struct
+    {
+        f32_t u;
+        f32_t v;
+        f32_t w;
+    };
+
+    f32_t data[3];
+};
+
+typedef union vec4_t vec4_t;
+union vec4_t
+{
+    struct
+    {
+        f32_t x;
+        f32_t y;
+        f32_t z;
+        f32_t w;
+    };
+
+    struct
+    {
+        f32_t r;
+        f32_t g;
+        f32_t b;
+        f32_t a;
+    };
+
+    f32_t data[4];
+};
+
+typedef union quat_t quat_t;
+union quat_t
+{
+    struct
+    {
+        f32_t x;
+        f32_t y;
+        f32_t z;
+        f32_t w;
+    };
+
+    f32_t data[4];
+};
+
+typedef struct mat4_t mat4_t;
+struct mat4_t
+{
+    f32_t m[4][4];
+};
+
+#pragma warning(pop)
+
+///////////////
+// FUNCTIONS
+
 internal b32_t math_approx_zero(f32_t value);
 internal b32_t math_approx_equal(f32_t a, f32_t b, f32_t error);
 

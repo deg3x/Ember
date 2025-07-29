@@ -245,10 +245,10 @@ quat_from_matrix(mat4_t* matrix)
     f32_t inv_two_sqrt = 1.0f / (2.0f * max_sqrt);
 
     quat_t result;
-    result.q[max_idx]           = 0.5f * max_sqrt;
-    result.q[(max_idx + 1) % 4] = (matrix->m[1][2] + ops_sign[max_idx][0] * matrix->m[2][1]) * inv_two_sqrt;
-    result.q[(max_idx + 2) % 4] = (matrix->m[2][0] + ops_sign[max_idx][1] * matrix->m[0][2]) * inv_two_sqrt;
-    result.q[(max_idx + 3) % 4] = (matrix->m[0][1] + ops_sign[max_idx][2] * matrix->m[1][0]) * inv_two_sqrt;
+    result.data[max_idx]           = 0.5f * max_sqrt;
+    result.data[(max_idx + 1) % 4] = (matrix->m[1][2] + ops_sign[max_idx][0] * matrix->m[2][1]) * inv_two_sqrt;
+    result.data[(max_idx + 2) % 4] = (matrix->m[2][0] + ops_sign[max_idx][1] * matrix->m[0][2]) * inv_two_sqrt;
+    result.data[(max_idx + 3) % 4] = (matrix->m[0][1] + ops_sign[max_idx][2] * matrix->m[1][0]) * inv_two_sqrt;
 
     return quat_normalize(&result);
 }

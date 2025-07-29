@@ -1,66 +1,6 @@
 #ifndef VECTOR_H
 #define VECTOR_H
 
-typedef union vec2_t vec2_t;
-union vec2_t
-{
-    struct
-    {
-        f32_t x;
-        f32_t y;
-    };
-
-    struct
-    {
-        f32_t u;
-        f32_t v;
-    };
-
-    f32_t array[2];
-};
-
-typedef union vec3_t vec3_t;
-union vec3_t
-{
-    struct
-    {
-        f32_t x;
-        f32_t y;
-        f32_t z;
-    };
-
-    struct
-    {
-        f32_t r;
-        f32_t g;
-        f32_t b;
-    };
-
-    f32_t array[3];
-};
-
-typedef union vec4_t vec4_t;
-union vec4_t
-{
-    struct
-    {
-        f32_t x;
-        f32_t y;
-        f32_t z;
-        f32_t w;
-    };
-
-    struct
-    {
-        f32_t r;
-        f32_t g;
-        f32_t b;
-        f32_t a;
-    };
-
-    f32_t array[4];
-};
-
 internal vec2_t vec2_normalize(vec2_t* vector);
 internal vec3_t vec3_normalize(vec3_t* vector);
 internal vec4_t vec4_normalize(vec4_t* vector);
