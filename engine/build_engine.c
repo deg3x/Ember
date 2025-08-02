@@ -11,6 +11,7 @@
 #include "math/matrix.h"
 #include "math/quaternion.h"
 #include "memory/arena.h"
+#include "input/input.h"
 
 /////////////
 // C_FILES
@@ -21,3 +22,4 @@
 #include "math/matrix.c"
 #include "math/quaternion.c"
 #include "memory/arena.c"
+#include "input/input.c"

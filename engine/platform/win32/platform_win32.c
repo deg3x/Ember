@@ -158,7 +158,8 @@ win32_window_message_callback(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_para
     return DefWindowProc(hwnd, msg, w_param, l_param);
 }
 
-int WINAPI WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cmd)
+int WINAPI 
+WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cmd)
 {
     platform_gfx_init();
     platform_handle_t window_handle = platform_gfx_window_create("Ember Engine");
