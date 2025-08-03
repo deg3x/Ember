@@ -27,11 +27,21 @@ struct arena_t
     arena_flags_t flags;
 };
 
+typedef struct arena_scratch_t arena_scratch_t;
+struct scratch_t
+{
+    arena_t* arena;
+    u64_t position;
+};
+
 internal arena_t* arena_init(arena_params_t* params);
 internal void*    arena_push(arena_t* arena, u64_t size, u64_t align);
 internal void     arena_pop(arena_t* arena, u64_t size);
 internal void     arena_pop_to(arena_t* arena, u64_t pos);
 internal void     arena_clear(arena_t* arena);
 internal void     arena_release(arena_t* arena);
+
+internal scratch_t arena_scratch_begin(arena_t* arena);
+internal void      arena_scratch_end(scratch_t* arena_scratch);
 
 #endif // ARENA_H

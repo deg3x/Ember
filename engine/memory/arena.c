@@ -102,3 +102,19 @@ arena_release(arena_t* arena)
     platform_mem_release(arena, arena->size_res);
 }
 
+internal scratch_t
+arena_scratch_begin(arena_t* arena)
+{
+    scratch_t scratch = {
+        arena,
+        arena->position
+    };
+
+    return scratch;
+}
+
+internal void
+arena_scratch_end(scratch_t* scratch)
+{
+    arena_pop_to(scratch->arena, scratch->position);
+}
