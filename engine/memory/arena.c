@@ -114,7 +114,7 @@ arena_scratch_begin(arena_t* arena)
 }
 
 internal void
-arena_scratch_end(scratch_t* scratch)
+arena_scratch_end(scratch_t scratch)
 {
-    arena_pop_to(scratch->arena, scratch->position);
+    arena_pop_to(scratch.arena, scratch.position);
 }

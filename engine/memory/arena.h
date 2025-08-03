@@ -27,7 +27,7 @@ struct arena_t
     arena_flags_t flags;
 };
 
-typedef struct arena_scratch_t arena_scratch_t;
+typedef struct scratch_t scratch_t;
 struct scratch_t
 {
     arena_t* arena;
@@ -42,8 +42,8 @@ internal void     arena_clear(arena_t* arena);
 internal void     arena_release(arena_t* arena);
 
 internal scratch_t arena_scratch_begin(arena_t* arena);
-internal void      arena_scratch_end(scratch_t* scratch);
+internal void      arena_scratch_end(scratch_t scratch);
 
-#define push_memory(a, t, c) arena_push(a, sizeof(t) * (c), ALIGN_OF(t))
+#define memory_push(a, t, c) arena_push(a, sizeof(t) * (c), ALIGN_OF(t))
 
 #endif // ARENA_H
