@@ -27,6 +27,12 @@ typedef double f64_t;
 #define GB(n) (((u64_t)n) << 30)
 #define TB(n) (((u64_t)n) << 40)
 
+#if defined(_MSC_VER)
+    #define ALIGN_OF(t) __alignof(t)
+#else
+    #define ALIGN_OF(t) MAX(sizeof(t), 8)
+#endif
+
 #define global   static
 #define internal static
 
@@ -40,7 +46,7 @@ typedef double f64_t;
     #define DEBUG_BREAK()
 #endif
 
-#ifdef EMBER_ASSERT_ENABLED
+#if EMBER_ASSERT_ENABLED
 void assert_fail(const char* expression, const char* message, const char* file, i32_t line)
 {
     fprintf(stderr, "Assertion failed: %s [%s::%d]\n\t%s\n", expression, file, line, message);
