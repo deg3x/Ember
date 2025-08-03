@@ -27,6 +27,8 @@ typedef double f64_t;
 #define GB(n) (((u64_t)n) << 30)
 #define TB(n) (((u64_t)n) << 40)
 
+#define ARRAY_COUNT(a) (sizeof(a) / sizeof(a[0]))
+
 #if defined(_MSC_VER)
     #define ALIGN_OF(t) __alignof(t)
 #else
