@@ -174,12 +174,17 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cm
     platform_gfx_init();
     platform_handle_t window_handle = platform_gfx_window_create("Ember Engine");
 
+    platform_info_init();
+    renderer_init(window_handle);
+
     ShowWindow((HWND)window_handle.hnd, SW_SHOW);
 
     while (platform_gfx_process_events())
     {
 
     }
+
+    renderer_shutdown();
 
     return 0;
 }
