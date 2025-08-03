@@ -29,6 +29,8 @@ typedef double f64_t;
 
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof(a[0]))
 
+#define MEMORY_ZERO(p, s) memset((p), 0, (s));
+
 #if defined(_MSC_VER)
     #define ALIGN_OF(t) __alignof(t)
 #else
