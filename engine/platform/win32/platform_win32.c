@@ -60,6 +60,16 @@ platform_mem_decommit(void* ptr, u64_t size)
     VirtualFree(ptr, size, MEM_DECOMMIT);
 }
 
+internal platform_handle_t
+platform_get_instance_handle()
+{
+    platform_handle_t handle = {
+        .hnd = GetModuleHandle(NULL)
+    };
+
+    return handle;
+}
+
 internal void
 platform_gfx_init()
 {
@@ -164,7 +174,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cm
     platform_gfx_init();
     platform_handle_t window_handle = platform_gfx_window_create("Ember Engine");
 
-    ShowWindow((HWND)window_handle.u64, SW_SHOW);
+    ShowWindow((HWND)window_handle.hnd, SW_SHOW);
 
     while (platform_gfx_process_events())
     {

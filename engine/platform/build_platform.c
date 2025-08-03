@@ -3,7 +3,7 @@
 
 #include "platform.h"
 
-#if defined(PLATFORM_WINDOWS)
+#if PLATFORM_WINDOWS
     #include <windows.h>
     #include "win32/platform_win32.h"
 #else
@@ -15,7 +15,7 @@
 
 #include "platform.c"
 
-#if defined(PLATFORM_WINDOWS)
+#if PLATFORM_WINDOWS
     #include "win32/platform_win32.c"
 #else
     #error Platform not supported.
