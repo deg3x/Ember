@@ -44,6 +44,7 @@ internal void     arena_release(arena_t* arena);
 internal scratch_t arena_scratch_begin(arena_t* arena);
 internal void      arena_scratch_end(scratch_t scratch);
 
-#define memory_push(a, t, c) arena_push(a, sizeof(t) * (c), ALIGN_OF(t))
+#define MEMORY_PUSH(a, t, c)      (t *)arena_push((a), sizeof(t) * (c), ALIGN_OF(t))
+#define MEMORY_PUSH_ZERO(a, t, c) (t *)MEMORY_ZERO(MEMORY_PUSH(a, t, c), sizeof(t) * c)
 
 #endif // ARENA_H
