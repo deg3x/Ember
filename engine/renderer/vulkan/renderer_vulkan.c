@@ -140,7 +140,7 @@ renderer_vk_create_device()
     device_info.ppEnabledExtensionNames = g_device_extensions;
 #if RHI_VK_VALIDATIONS_ENABLED
     device_info.enabledLayerCount       = ARRAY_COUNT(g_validation_layers);
-    device_info.ppEnabledLayerNames     = g_validation_layes;
+    device_info.ppEnabledLayerNames     = g_validation_layers;
 #endif
 
     VkResult result = vkCreateDevice(g_renderer.physical_device, &device_info, NULL, &g_renderer.device);
