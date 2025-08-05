@@ -8,11 +8,13 @@ renderer_init(platform_handle_t window_handle)
     renderer_vk_create_surface(window_handle);
     renderer_vk_create_physical_device();
     renderer_vk_create_device();
+    renderer_vk_create_swapchain(window_handle);
 }
 
 internal void
 renderer_shutdown()
 {
+    vkDestroySwapchainKHR(g_renderer.device, g_renderer.swapchain, NULL);
     vkDestroyDevice(g_renderer.device, NULL);
     vkDestroySurfaceKHR(g_renderer.instance, g_renderer.surface, NULL);
     vkDestroyInstance(g_renderer.instance, NULL);
@@ -100,9 +102,9 @@ renderer_vk_create_physical_device()
         }
     }
 
-    arena_scratch_end(scratch);
-
     EMBER_ASSERT(g_renderer.physical_device != VK_NULL_HANDLE);
+
+    arena_scratch_end(scratch);
 }
 
 internal void
@@ -142,16 +144,134 @@ renderer_vk_create_device()
 #endif
 
     VkResult result = vkCreateDevice(g_renderer.physical_device, &device_info, NULL, &g_renderer.device);
+    EMBER_ASSERT(result == VK_SUCCESS);
 
     arena_scratch_end(scratch);
-
-    EMBER_ASSERT(result == VK_SUCCESS);
 }
 
 internal void
-renderer_vk_create_swapchain()
+renderer_vk_create_swapchain(platform_handle_t window_handle)
 {
+    VkSurfaceFormatKHR swap_format = renderer_vk_swapchain_find_format();
+    VkPresentModeKHR swap_present  = renderer_vk_swapchain_find_present();
+    VkExtent2D swap_extent         = renderer_vk_swapchain_find_extent(window_handle);
 
+    VkSurfaceCapabilitiesKHR capabilities;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_renderer.physical_device, g_renderer.surface, &capabilities);
+
+    u32_t img_count = CLAMP_TOP(2, capabilities.minImageCount);
+    if (capabilities.maxImageCount > 0)
+    {
+        img_count = CLAMP_BOT(img_count, capabilities.maxImageCount);
+    }
+
+    renderer_vk_queue_indices_t family_indices = renderer_vk_find_queue_indices(g_renderer.physical_device);
+
+    VkSwapchainCreateInfoKHR swap_info = {};
+    swap_info.sType                    = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swap_info.surface                  = g_renderer.surface;
+    swap_info.minImageCount            = img_count;
+    swap_info.imageFormat              = swap_format.format;
+    swap_info.imageColorSpace          = swap_format.colorSpace;
+    swap_info.imageExtent              = swap_extent;
+    swap_info.imageArrayLayers         = 1;
+    swap_info.preTransform             = capabilities.currentTransform;
+    swap_info.presentMode              = swap_present;
+    swap_info.clipped                  = VK_TRUE;
+    swap_info.oldSwapchain             = VK_NULL_HANDLE;
+    swap_info.compositeAlpha           = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swap_info.imageUsage               = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    if (family_indices.graphics != family_indices.presentation)
+    {
+        swap_info.imageSharingMode      = VK_SHARING_MODE_CONCURRENT;
+        swap_info.queueFamilyIndexCount = 2;
+        swap_info.pQueueFamilyIndices   = &family_indices;
+    }
+    else
+    {
+        swap_info.imageSharingMode      = VK_SHARING_MODE_EXCLUSIVE;
+        swap_info.queueFamilyIndexCount = 0;
+        swap_info.pQueueFamilyIndices   = NULL;
+    }
+
+    VkResult result = vkCreateSwapchainKHR(g_renderer.device, &swap_info, NULL, &g_renderer.swapchain);
+    EMBER_ASSERT(result == VK_SUCCESS);
+
+    g_renderer.swapchain_extent  = swap_extent;
+    g_renderer.swapchain_img_fmt = swap_format.format;
+}
+
+internal VkSurfaceFormatKHR
+renderer_vk_swapchain_find_format()
+{
+    scratch_t scratch = arena_scratch_begin(g_renderer.arena);
+
+    u32_t format_count;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(g_renderer.physical_device, g_renderer.surface, &format_count, NULL);
+
+    EMBER_ASSERT(format_count > 0);
+
+    VkSurfaceFormatKHR* formats = MEMORY_PUSH(scratch.arena, VkSurfaceFormatKHR, format_count);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(g_renderer.physical_device, g_renderer.surface, &format_count, formats);
+
+    for (u32_t i = 0; i < format_count; i++)
+    {
+        if (formats[i].format == VK_FORMAT_B8G8R8_SRGB && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        {
+            arena_scratch_end(scratch);
+            return formats[i];
+        }
+    }
+
+    arena_scratch_end(scratch);
+    return formats[0];
+}
+
+internal VkPresentModeKHR
+renderer_vk_swapchain_find_present()
+{
+    scratch_t scratch = arena_scratch_begin(g_renderer.arena);
+
+    u32_t present_count;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(g_renderer.physical_device, g_renderer.surface, &present_count, NULL);
+
+    VkPresentModeKHR* present_modes = MEMORY_PUSH(scratch.arena, VkPresentModeKHR, present_count);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(g_renderer.physical_device, g_renderer.surface, &present_count, present_modes);
+
+    for (u32_t i = 0; i < present_count; i++)
+    {
+        if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+            arena_scratch_end(scratch);
+            return present_modes[i];
+        }
+    }
+
+    // NOTE(KB): VK_PRESENT_MODE_FIFO_KHR is the only one guaranteed to exist
+    arena_scratch_end(scratch);
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+internal VkExtent2D
+renderer_vk_swapchain_find_extent(platform_handle_t window_handle)
+{
+    VkSurfaceCapabilitiesKHR capabilities;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_renderer.physical_device, g_renderer.surface, &capabilities);
+
+    if (capabilities.currentExtent.width != U32_MAX)
+    {
+        return capabilities.currentExtent;
+    }
+
+    platform_window_size_t client_size = platform_gfx_window_client_get_size(window_handle);
+
+    VkExtent2D extent = {
+        client_size.width,
+        client_size.height
+    };
+
+    return extent;
 }
 
 internal renderer_vk_queue_indices_t
@@ -188,9 +308,9 @@ renderer_vk_find_queue_indices(VkPhysicalDevice device)
         }
     }
 
-    arena_scratch_end(scratch);
-
     EMBER_ASSERT(graphics_found && present_found);
+
+    arena_scratch_end(scratch);
 
     renderer_vk_queue_indices_t result = {
         graphics,
@@ -265,31 +385,6 @@ renderer_vk_check_instance_extensions()
 }
 
 internal b32_t
-renderer_vk_check_swapchain(VkPhysicalDevice device)
-{
-    VkSurfaceCapabilitiesKHR capabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, g_renderer.surface, &capabilities);
-
-    scratch_t scratch = arena_scratch_begin(g_renderer.arena);
-
-    u32_t format_count;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, g_renderer.surface, &format_count, NULL);
-
-    VkSurfaceFormatKHR* formats = MEMORY_PUSH(scratch.arena, VkSurfaceFormatKHR, format_count);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, g_renderer.surface, &format_count, formats);
-
-    u32_t present_count;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, g_renderer.surface, &present_count, NULL);
-
-    VkPresentModeKHR* present_modes = MEMORY_PUSH(scratch.arena, VkPresentModeKHR, present_count);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, g_renderer.surface, &present_count, present_modes);
-
-    arena_scratch_end(scratch);
-
-    return TRUE;
-}
-
-internal b32_t
 renderer_vk_check_device_extensions(VkPhysicalDevice device)
 {
     scratch_t scratch = arena_scratch_begin(g_renderer.arena);
@@ -331,13 +426,11 @@ renderer_vk_device_is_suitable(VkPhysicalDevice device)
     vkGetPhysicalDeviceFeatures(device, &features);
 
     b32_t exts_supported = renderer_vk_check_device_extensions(device);
-    b32_t swap_supported = renderer_vk_check_swapchain(device);
     b32_t prop_supported = (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
     b32_t feat_supported = features.samplerAnisotropy;
 
     b32_t result = 
         exts_supported &&
-        swap_supported &&
         prop_supported &&
         feat_supported;
 
