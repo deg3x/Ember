@@ -93,6 +93,22 @@ platform_gfx_init()
     (void)atom;
 }
 
+internal b32_t
+platform_gfx_process_events()
+{
+    MSG msg = {};
+
+    if (GetMessage(&msg, NULL, 0, 0) == 0)
+    {
+        return FALSE;
+    }
+
+    TranslateMessage(&msg);
+    DispatchMessage(&msg);
+
+    return TRUE;
+}
+
 internal platform_handle_t
 platform_gfx_window_create(const char* window_name)
 {
@@ -125,20 +141,38 @@ platform_gfx_window_create(const char* window_name)
     return handle;
 }
 
-internal b32_t
-platform_gfx_process_events()
+internal platform_window_size_t
+platform_gfx_window_get_size(platform_handle_t window_handle)
 {
-    MSG msg = {};
+    RECT window_rect;
+    
+    EMBER_ASSERT(IsWindow(window_handle.hnd));
 
-    if (GetMessage(&msg, NULL, 0, 0) == 0)
-    {
-        return FALSE;
-    }
+    GetWindowRect(window_handle.hnd, &window_rect);
 
-    TranslateMessage(&msg);
-    DispatchMessage(&msg);
+    platform_window_size_t result = {
+        window_rect.right - window_rect.left,
+        window_rect.bottom - window_rect.top
+    };
 
-    return TRUE;
+    return result;
+}
+
+internal platform_window_size_t
+platform_gfx_window_client_get_size(platform_handle_t window_handle)
+{
+    RECT client_rect;
+    
+    EMBER_ASSERT(IsWindow(window_handle.hnd));
+
+    GetClientRect(window_handle.hnd, &client_rect);
+
+    platform_window_size_t result = {
+        client_rect.right - client_rect.left,
+        client_rect.bottom - client_rect.top
+    };
+
+    return result;
 }
 
 internal LRESULT CALLBACK

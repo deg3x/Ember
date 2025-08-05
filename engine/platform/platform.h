@@ -16,6 +16,13 @@ struct platform_handle_t
     void* hnd;
 };
 
+typedef struct platform_window_size_t platform_window_size_t;
+struct platform_window_size_t
+{
+    u32_t width;
+    u32_t height;
+};
+
 global platform_info_t g_platform_info = {};
 
 internal void platform_info_init();
@@ -31,8 +38,10 @@ internal void  platform_mem_decommit(void* ptr, u64_t size);
 internal b32_t             platform_handle_equal(platform_handle_t handle_a, platform_handle_t handle_b);
 internal platform_handle_t platform_get_instance_handle();
 
-internal void              platform_gfx_init();
-internal b32_t             platform_gfx_process_events();
-internal platform_handle_t platform_gfx_window_create(const char* title);
+internal void                   platform_gfx_init();
+internal b32_t                  platform_gfx_process_events();
+internal platform_handle_t      platform_gfx_window_create(const char* title);
+internal platform_window_size_t platform_gfx_window_get_size(platform_handle_t window_handle);
+internal platform_window_size_t platform_gfx_window_client_get_size(platform_handle_t window_handle);
 
 #endif // PLATFORM_H
