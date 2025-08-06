@@ -1,6 +1,8 @@
 #ifndef RENDERER_VULKAN_H 
 #define RENDERER_VULKAN_H 
 
+#define RENDERER_VK_SWAP_IMG_COUNT 2
+
 struct renderer_t
 {
     arena_t* arena;

@@ -14,6 +14,10 @@ renderer_init(platform_handle_t window_handle)
 internal void
 renderer_shutdown()
 {
+    for (u32_t i = 0; i < RENDERER_VK_SWAP_IMG_COUNT; i++)
+    {
+        vkDestroyImageView(g_renderer.device, g_renderer.swapchain_img_views[i], NULL);
+    }
     vkDestroySwapchainKHR(g_renderer.device, g_renderer.swapchain, NULL);
     vkDestroyDevice(g_renderer.device, NULL);
     vkDestroySurfaceKHR(g_renderer.instance, g_renderer.surface, NULL);
@@ -162,11 +166,10 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
     VkSurfaceCapabilitiesKHR capabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_renderer.physical_device, g_renderer.surface, &capabilities);
 
-    u32_t img_count = CLAMP_TOP(2, capabilities.minImageCount);
-    if (capabilities.maxImageCount > 0)
-    {
-        img_count = CLAMP_BOT(img_count, capabilities.maxImageCount);
-    }
+    u32_t img_count = RENDERER_VK_SWAP_IMG_COUNT;
+
+    EMBER_ASSERT(img_count >= capabilities.minImageCount);
+    EMBER_ASSERT(img_count <= capabilities.maxImageCount || capabilities.maxImageCount == 0);
 
     renderer_vk_queue_indices_t family_indices = renderer_vk_find_queue_indices(g_renderer.physical_device);
 
