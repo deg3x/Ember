@@ -11,6 +11,8 @@ struct renderer_t
     VkQueue graphics_queue;
     VkQueue present_queue;
     VkSwapchainKHR swapchain;
+    VkImage* swapchain_images;
+    VkImageView* swapchain_img_views;
     VkExtent2D swapchain_extent;
     VkFormat swapchain_img_fmt;
 };

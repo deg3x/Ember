@@ -201,8 +201,33 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
     VkResult result = vkCreateSwapchainKHR(g_renderer.device, &swap_info, NULL, &g_renderer.swapchain);
     EMBER_ASSERT(result == VK_SUCCESS);
 
-    g_renderer.swapchain_extent  = swap_extent;
-    g_renderer.swapchain_img_fmt = swap_format.format;
+    g_renderer.swapchain_extent    = swap_extent;
+    g_renderer.swapchain_img_fmt   = swap_format.format;
+    g_renderer.swapchain_images    = MEMORY_PUSH(g_renderer.arena, VkImage, img_count);
+    g_renderer.swapchain_img_views = MEMORY_PUSH(g_renderer.arena, VkImageView, img_count);
+
+    VkImageViewCreateInfo view_info           = {};
+    view_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view_info.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+    view_info.format                          = g_renderer.swapchain_img_fmt;
+    view_info.components.r                    = VK_COMPONENT_SWIZZLE_IDENTITY;
+    view_info.components.g                    = VK_COMPONENT_SWIZZLE_IDENTITY;
+    view_info.components.b                    = VK_COMPONENT_SWIZZLE_IDENTITY;
+    view_info.components.a                    = VK_COMPONENT_SWIZZLE_IDENTITY;
+    view_info.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    view_info.subresourceRange.baseArrayLayer = 0;
+    view_info.subresourceRange.baseMipLevel   = 0;
+    view_info.subresourceRange.levelCount     = 1;
+    view_info.subresourceRange.layerCount     = 1;
+
+    vkGetSwapchainImagesKHR(g_renderer.device, g_renderer.swapchain, &img_count, g_renderer.swapchain_images);
+    for (u32_t i = 0; i < img_count; i++)
+    {
+        view_info.image = g_renderer.swapchain_images[i];
+
+        result = vkCreateImageView(g_renderer.device, &view_info, NULL, &g_renderer.swapchain_img_views[i]);
+        EMBER_ASSERT(result == VK_SUCCESS);
+    }
 }
 
 internal VkSurfaceFormatKHR
