@@ -8,6 +8,8 @@ struct renderer_t
     VkSurfaceKHR surface;
     VkPhysicalDevice physical_device;
     VkDevice device;
+    VkQueue graphics_queue;
+    VkQueue present_queue;
     VkSwapchainKHR swapchain;
     VkExtent2D swapchain_extent;
     VkFormat swapchain_img_fmt;

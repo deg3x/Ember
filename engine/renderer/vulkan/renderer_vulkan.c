@@ -39,7 +39,7 @@ renderer_vk_create_instance()
     EMBER_ASSERT(exts_found);
 
 #if RHI_VK_VALIDATIONS_ENABLED
-    b8_t layers_found = renderer_vk_check_validation_layers();
+    b32_t layers_found = renderer_vk_check_validation_layers();
 #endif
 
     VkInstanceCreateInfo instance_info    = {};
@@ -146,6 +146,9 @@ renderer_vk_create_device()
     VkResult result = vkCreateDevice(g_renderer.physical_device, &device_info, NULL, &g_renderer.device);
     EMBER_ASSERT(result == VK_SUCCESS);
 
+    vkGetDeviceQueue(g_renderer.device, family_indices.graphics, 0, &g_renderer.graphics_queue);
+    vkGetDeviceQueue(g_renderer.device, family_indices.presentation, 0, &g_renderer.present_queue);
+
     arena_scratch_end(scratch);
 }
 
@@ -186,7 +189,7 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
     {
         swap_info.imageSharingMode      = VK_SHARING_MODE_CONCURRENT;
         swap_info.queueFamilyIndexCount = 2;
-        swap_info.pQueueFamilyIndices   = &family_indices;
+        swap_info.pQueueFamilyIndices   = (u32_t *)(&family_indices);
     }
     else
     {
