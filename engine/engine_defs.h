@@ -41,8 +41,8 @@ typedef double f64_t;
 
 #define U32_FROM_U64_CLAMPED(v) (((v) > U32_MAX) ? U32_MAX : (u32_t)(v))
 
-#define TRUE  1
-#define FALSE 0
+#define EMBER_TRUE  1
+#define EMBER_FALSE 0
 
 #define KB(n) (((u64_t)n) << 10)
 #define MB(n) (((u64_t)n) << 20)

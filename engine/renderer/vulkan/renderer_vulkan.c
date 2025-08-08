@@ -316,8 +316,8 @@ renderer_vk_find_queue_indices(VkPhysicalDevice device)
     VkQueueFamilyProperties* family_props = MEMORY_PUSH(scratch.arena, VkQueueFamilyProperties, family_count);
     vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, family_props);
 
-    b8_t graphics_found = FALSE;
-    b8_t present_found  = FALSE;
+    b8_t graphics_found = EMBER_FALSE;
+    b8_t present_found  = EMBER_FALSE;
     u32_t graphics      = 0;
     u32_t present       = 0;
 
@@ -328,13 +328,13 @@ renderer_vk_find_queue_indices(VkPhysicalDevice device)
 
         if (family_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
-            graphics_found = TRUE;
+            graphics_found = EMBER_TRUE;
             graphics       = i;
         }
 
         if (present_support)
         {
-            present_found = TRUE;
+            present_found = EMBER_TRUE;
             present       = i;
         }
     }
@@ -362,15 +362,15 @@ renderer_vk_check_validation_layers()
     VkLayerProperties* layer_props = MEMORY_PUSH(scratch.arena, VkLayerProperties, layer_count);
     vkEnumerateInstanceLayerProperties(&layer_count, layer_props);
 
-    b32_t layers_found = TRUE;
+    b32_t layers_found = EMBER_TRUE;
     for (u32_t i = 0; i < ARRAY_COUNT(g_validation_layers); i++)
     {
-        b32_t layer_found = FALSE;
+        b32_t layer_found = EMBER_FALSE;
         for (u32_t j = 0; j < layer_count; j++)
         {
             if (strcmp(g_validation_layers[i], layer_props[j].layerName) == 0)
             {
-                layer_found = TRUE;
+                layer_found = EMBER_TRUE;
                 break;
             }
         }
@@ -394,15 +394,15 @@ renderer_vk_check_instance_extensions()
     VkExtensionProperties* ext_props = MEMORY_PUSH(scratch.arena, VkExtensionProperties, ext_count);
     vkEnumerateInstanceExtensionProperties(NULL, &ext_count, ext_props);
 
-    b32_t exts_found = TRUE;
+    b32_t exts_found = EMBER_TRUE;
     for (u32_t i = 0; i < ARRAY_COUNT(g_instance_extensions); i++)
     {
-        b32_t ext_found = FALSE;
+        b32_t ext_found = EMBER_FALSE;
         for (u32_t j = 0; j < ext_count; j++)
         {
             if (strcmp(g_instance_extensions[i], ext_props[j].extensionName) == 0)
             {
-                ext_found = TRUE;
+                ext_found = EMBER_TRUE;
                 break;
             }
         }
@@ -426,15 +426,15 @@ renderer_vk_check_device_extensions(VkPhysicalDevice device)
     VkExtensionProperties* ext_props = MEMORY_PUSH(scratch.arena, VkExtensionProperties, ext_count);
     vkEnumerateDeviceExtensionProperties(device, NULL, &ext_count, ext_props);
 
-    b32_t exts_found = TRUE;
+    b32_t exts_found = EMBER_TRUE;
     for (u32_t i = 0; i < ARRAY_COUNT(g_device_extensions); i++)
     {
-        b32_t ext_found = FALSE;
+        b32_t ext_found = EMBER_FALSE;
         for (u32_t j = 0; j < ext_count; j++)
         {
             if (strcmp(g_device_extensions[i], ext_props[j].extensionName) == 0)
             {
-                ext_found = TRUE;
+                ext_found = EMBER_TRUE;
                 break;
             }
         }

@@ -44,7 +44,7 @@ platform_mem_commit(void* ptr, u64_t size)
 internal b32_t
 platform_mem_commit_large(void* ptr, u64_t size)
 {
-    return TRUE;
+    return EMBER_TRUE;
 }
 
 internal void
@@ -267,13 +267,13 @@ platform_gfx_process_events()
 
     if (GetMessage(&msg, NULL, 0, 0) == 0)
     {
-        return FALSE;
+        return EMBER_FALSE;
     }
 
     TranslateMessage(&msg);
     DispatchMessage(&msg);
 
-    return TRUE;
+    return EMBER_TRUE;
 }
 
 internal platform_handle_t
