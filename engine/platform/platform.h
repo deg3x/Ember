@@ -23,6 +23,23 @@ struct platform_window_size_t
     u32_t height;
 };
 
+typedef u32_t platform_file_flags_t;
+enum
+{
+    PLATFORM_FILE_FLAGS_read    = (1 << 0),
+    PLATFORM_FILE_FLAGS_write   = (1 << 1),
+    PLATFORM_FILE_FLAGS_exec    = (1 << 2),
+    PLATFORM_FILE_FLAGS_append  = (1 << 3),
+    PLATFORM_FILE_FLAGS_share_r = (1 << 4),
+    PLATFORM_FILE_FLAGS_share_w = (1 << 5),
+};
+
+typedef struct platform_file_props_t platform_file_props_t;
+struct platform_file_props_t
+{
+    u64_t size;
+};
+
 global platform_info_t g_platform_info = {};
 
 internal void platform_info_init();
@@ -34,6 +51,12 @@ internal b32_t platform_mem_commit(void* ptr, u64_t size);
 internal b32_t platform_mem_commit_large(void* ptr, u64_t size);
 internal void  platform_mem_release(void* ptr, u64_t size);
 internal void  platform_mem_decommit(void* ptr, u64_t size);
+
+internal platform_handle_t     platform_file_open(const char* file_path, platform_file_flags_t flags);
+internal void                  platform_file_close(platform_handle_t file_handle);
+internal platform_file_props_t platform_file_props(platform_handle_t file_handle);
+internal u64_t                 platform_file_write(platform_handle_t file_handle, void* data, u64_t write_size);
+internal u64_t                 platform_file_read(platform_handle_t file_handle, void* data, u64_t read_size);
 
 internal b32_t             platform_handle_equal(platform_handle_t handle_a, platform_handle_t handle_b);
 internal platform_handle_t platform_get_instance_handle();

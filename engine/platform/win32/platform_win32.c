@@ -61,6 +61,173 @@ platform_mem_decommit(void* ptr, u64_t size)
 }
 
 internal platform_handle_t
+platform_file_open(const char* file_path, platform_file_flags_t flags)
+{
+    DWORD access_flags = 0;
+    DWORD share_flags  = 0;
+    DWORD create_disp  = 0;
+
+    if (flags & PLATFORM_FILE_FLAGS_read)
+    {
+        access_flags |= GENERIC_READ;
+        create_disp   = OPEN_EXISTING;
+    }
+    if (flags & PLATFORM_FILE_FLAGS_exec)
+    {
+        access_flags |= GENERIC_EXECUTE;
+        create_disp   = OPEN_EXISTING;
+    }
+    if (flags & PLATFORM_FILE_FLAGS_write)
+    {
+        access_flags |= GENERIC_WRITE;
+        create_disp   = CREATE_ALWAYS;
+    }
+    if (flags & PLATFORM_FILE_FLAGS_append)
+    {
+        access_flags |= FILE_GENERIC_WRITE ^ FILE_WRITE_DATA;
+        create_disp   = OPEN_ALWAYS;
+    }
+    if (flags & PLATFORM_FILE_FLAGS_share_r)
+    {
+        share_flags |= FILE_SHARE_READ;
+    }
+    if (flags & PLATFORM_FILE_FLAGS_share_w)
+    {
+        share_flags |= FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+    }
+
+    HANDLE file_handle = CreateFile(
+        file_path,
+        access_flags,
+        share_flags,
+        NULL,
+        create_disp,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+
+    platform_handle_t result = {};
+
+    if (file_handle == INVALID_HANDLE_VALUE)
+    {
+        return result;
+    }
+
+    result.hnd = file_handle;
+
+    return result;
+}
+
+internal void
+platform_file_close(platform_handle_t file_handle)
+{
+    if (file_handle.hnd == NULL)
+    {
+        return;
+    }
+
+    BOOL result = CloseHandle(file_handle.hnd);
+
+    (void)result;
+}
+
+internal platform_file_props_t
+platform_file_props(platform_handle_t file_handle)
+{
+    platform_file_props_t result = {};
+
+    if (file_handle.hnd == NULL)
+    {
+        return result;
+    }
+
+    BY_HANDLE_FILE_INFORMATION file_info;
+    BOOL info_valid = GetFileInformationByHandle(file_handle.hnd, &file_info);
+
+    if (!info_valid)
+    {
+        return result;
+    }
+
+    result.size |= ((u64_t)file_info.nFileSizeHigh) << 32;
+    result.size |= (u64_t)file_info.nFileSizeLow;
+
+    return result;
+}
+
+// TODO(KB): Add writing to specified position (OVERLAPPED type)
+internal u64_t
+platform_file_write(platform_handle_t file_handle, void* data, u64_t write_size)
+{
+    if (file_handle.hnd == NULL)
+    {
+        return 0;
+    }
+
+    u64_t bytes_written_total = 0;
+
+    while (bytes_written_total < write_size)
+    {
+        u64_t bytes_to_write_ttl = write_size - bytes_written_total;
+        DWORD bytes_to_write     = U32_FROM_U64_CLAMPED(bytes_to_write_ttl);
+        DWORD bytes_written;
+
+        BOOL write_success = WriteFile(file_handle.hnd, data, bytes_to_write, &bytes_written, NULL);
+        if (!write_success)
+        {
+            break;
+        }
+
+        bytes_written_total += bytes_written;
+    }
+
+    return bytes_written_total;
+}
+
+// TODO(KB): Add reading from specified position (OVERLAPPED type)
+internal u64_t
+platform_file_read(platform_handle_t file_handle, void* data, u64_t read_size)
+{
+    if (file_handle.hnd == NULL)
+    {
+        return 0;
+    }
+
+    u64_t file_size;
+    BOOL size_success = GetFileSizeEx(file_handle.hnd, (LPDWORD)&file_size);
+    if (!size_success)
+    {
+        return 0;
+    }
+
+    u64_t bytes_read_total  = 0;
+    u64_t read_size_clamped = MIN(read_size, file_size);
+
+    while (bytes_read_total < read_size_clamped)
+    {
+        u64_t bytes_to_read_ttl = read_size_clamped - bytes_read_total;
+        DWORD bytes_to_read     = U32_FROM_U64_CLAMPED(bytes_to_read_ttl);
+        DWORD bytes_read;
+
+        BOOL read_success = ReadFile(file_handle.hnd, data, bytes_to_read, &bytes_read, NULL);
+        if (!read_success)
+        {
+            break;
+        }
+
+        bytes_read_total += bytes_read;
+
+        if (bytes_read != bytes_to_read)
+        {
+            break;
+        }
+    }
+
+    return bytes_read_total;
+}
+
+
+internal platform_handle_t
 platform_get_instance_handle()
 {
     platform_handle_t handle = {
@@ -136,7 +303,7 @@ platform_gfx_window_create(const char* window_name)
     window.handle     = window_handle;
     window.device_ctx = GetDC(window_handle);
 
-    platform_handle_t handle = {(u64_t) window_handle};
+    platform_handle_t handle = { window_handle};
 
     return handle;
 }

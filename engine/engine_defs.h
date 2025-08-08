@@ -39,6 +39,8 @@ typedef double f64_t;
 #define I32_MIN INT32_MIN
 #define I64_MIN INT64_MIN
 
+#define U32_FROM_U64_CLAMPED(v) (((v) > U32_MAX) ? U32_MAX : (u32_t)(v))
+
 #define TRUE  1
 #define FALSE 0
 
