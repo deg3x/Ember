@@ -75,7 +75,8 @@ typedef double f64_t;
 #if EMBER_ASSERT_ENABLED
 void assert_fail(const char* expression, const char* message, const char* file, i32_t line)
 {
-    fprintf(stderr, "Assertion failed: %s [%s::%d]\n\t%s\n", expression, file, line, message);
+    // TODO(KB): Add logging here
+    return;
 }
 
 #define EMBER_ASSERT(expr)                                  \

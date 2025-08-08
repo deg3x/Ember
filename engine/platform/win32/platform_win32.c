@@ -155,7 +155,6 @@ platform_file_props(platform_handle_t file_handle)
     return result;
 }
 
-// TODO(KB): Add writing to specified position (OVERLAPPED type)
 internal u64_t
 platform_file_write(platform_handle_t file_handle, void* data, u64_t write_size)
 {
@@ -194,7 +193,7 @@ platform_file_read(platform_handle_t file_handle, void* data, u64_t read_size)
     }
 
     u64_t file_size;
-    BOOL size_success = GetFileSizeEx(file_handle.hnd, (LPDWORD)&file_size);
+    BOOL size_success = GetFileSizeEx(file_handle.hnd, (PLARGE_INTEGER)&file_size);
     if (!size_success)
     {
         return 0;
