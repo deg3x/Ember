@@ -12,3 +12,5 @@ if not exist %bin_dir% mkdir %bin_dir%
 if not exist %lnk_dir% mkdir %lnk_dir%
 
 cl %cmp_opt% ./engine/build_engine.c %depends% %lnk_opt%
+
+call compile_shaders.bat

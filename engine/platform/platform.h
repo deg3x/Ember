@@ -57,6 +57,7 @@ internal void                  platform_file_close(platform_handle_t file_handle
 internal platform_file_props_t platform_file_props(platform_handle_t file_handle);
 internal u64_t                 platform_file_write(platform_handle_t file_handle, void* data, u64_t write_size);
 internal u64_t                 platform_file_read(platform_handle_t file_handle, void* data, u64_t read_size);
+internal u64_t                 platform_file_data(const char* file_path, void* data);
 
 internal b32_t             platform_handle_equal(platform_handle_t handle_a, platform_handle_t handle_b);
 internal platform_handle_t platform_get_instance_handle();
