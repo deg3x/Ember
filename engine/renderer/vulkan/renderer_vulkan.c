@@ -13,11 +13,11 @@ renderer_init(platform_handle_t window_handle)
     g_renderer.pipelines      = MEMORY_PUSH_ZERO(g_renderer.arena, renderer_pipeline_t, 1);
     g_renderer.pipeline_count = 1;
     
-    renderer_pipeline_create(g_renderer.pipelines);
+    renderer_pipeline_init(g_renderer.pipelines);
 }
 
 internal void
-renderer_shutdown()
+renderer_destroy()
 {
     for (int i = 0; i < g_renderer.pipeline_count; i++)
     {
@@ -37,7 +37,7 @@ renderer_shutdown()
 }
 
 internal void
-renderer_pipeline_create(renderer_pipeline_t* pipeline)
+renderer_pipeline_init(renderer_pipeline_t* pipeline)
 {
     renderer_vk_pipeline_create_graphics_pipeline_layout(pipeline);
     renderer_vk_pipeline_create_graphics_pipeline(pipeline);

@@ -384,7 +384,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cm
 
     }
 
-    renderer_shutdown();
+    renderer_destroy();
 
     return 0;
 }

@@ -27,9 +27,9 @@ struct vertex_t
 };
 
 internal void renderer_init(platform_handle_t window_handle);
-internal void renderer_shutdown();
+internal void renderer_destroy();
 
-internal void renderer_pipeline_create(renderer_pipeline_t* state);
+internal void renderer_pipeline_init(renderer_pipeline_t* state);
 internal void renderer_pipeline_destroy(renderer_pipeline_t* state);
 
 #endif // RENDERER_H
