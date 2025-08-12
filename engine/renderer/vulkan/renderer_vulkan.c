@@ -9,6 +9,8 @@ renderer_init(platform_handle_t window_handle)
     renderer_vk_create_physical_device();
     renderer_vk_create_device();
     renderer_vk_create_swapchain(window_handle);
+    renderer_vk_create_command_pool();
+    renderer_vk_create_command_buffers();
 
     g_renderer.pipelines      = MEMORY_PUSH_ZERO(g_renderer.arena, renderer_pipeline_t, 1);
     g_renderer.pipeline_count = 1;
@@ -24,6 +26,7 @@ renderer_destroy()
         renderer_pipeline_destroy(g_renderer.pipelines + i);
     }
 
+    vkDestroyCommandPool(g_renderer.device, g_renderer.command_pool, NULL);
     for (u32_t i = 0; i < RENDERER_VK_SWAP_IMG_COUNT; i++)
     {
         vkDestroyImageView(g_renderer.device, g_renderer.swapchain_img_views[i], NULL);
@@ -49,6 +52,7 @@ renderer_pipeline_destroy(renderer_pipeline_t* pipeline)
 {
     vkDestroyPipeline(g_renderer.device, pipeline->graphics_pipeline, NULL);
     vkDestroyPipelineLayout(g_renderer.device, pipeline->graphics_pipeline_layout, NULL);
+    vkDestroyDescriptorSetLayout(g_renderer.device, pipeline->descriptor_set_layout, NULL);
 }
 
 internal void
@@ -153,11 +157,11 @@ renderer_vk_create_physical_device()
 internal void
 renderer_vk_create_device()
 {
-    renderer_vk_queue_indices_t family_indices = renderer_vk_find_queue_indices(g_renderer.physical_device);
+    renderer_vk_find_queue_indices();
 
     scratch_t scratch = arena_scratch_begin(g_renderer.arena);
 
-    u32_t queue_count = (family_indices.graphics == family_indices.presentation) ? 1 : 2;
+    u32_t queue_count = (g_renderer.queue_ids.graphics == g_renderer.queue_ids.presentation) ? 1 : 2;
 
     VkDeviceQueueCreateInfo* queue_infos = MEMORY_PUSH_ZERO(scratch.arena, VkDeviceQueueCreateInfo, queue_count);
 
@@ -165,7 +169,7 @@ renderer_vk_create_device()
     for (u32_t i = 0; i < queue_count; i++)
     {
         queue_infos[i].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queue_infos[i].queueFamilyIndex = *(((u32_t *)(&family_indices)) + i);
+        queue_infos[i].queueFamilyIndex = *(((u32_t *)(&g_renderer.queue_ids)) + i);
         queue_infos[i].queueCount       = 1;
         queue_infos[i].pQueuePriorities = &queue_priority;
     }
@@ -194,8 +198,8 @@ renderer_vk_create_device()
     VkResult create_result = vkCreateDevice(g_renderer.physical_device, &device_info, NULL, &g_renderer.device);
     EMBER_ASSERT(create_result == VK_SUCCESS);
 
-    vkGetDeviceQueue(g_renderer.device, family_indices.graphics, 0, &g_renderer.graphics_queue);
-    vkGetDeviceQueue(g_renderer.device, family_indices.presentation, 0, &g_renderer.present_queue);
+    vkGetDeviceQueue(g_renderer.device, g_renderer.queue_ids.graphics, 0, &g_renderer.graphics_queue);
+    vkGetDeviceQueue(g_renderer.device, g_renderer.queue_ids.presentation, 0, &g_renderer.present_queue);
 
     arena_scratch_end(scratch);
 }
@@ -215,8 +219,6 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
     EMBER_ASSERT(img_count >= capabilities.minImageCount);
     EMBER_ASSERT(img_count <= capabilities.maxImageCount || capabilities.maxImageCount == 0);
 
-    renderer_vk_queue_indices_t family_indices = renderer_vk_find_queue_indices(g_renderer.physical_device);
-
     VkSwapchainCreateInfoKHR swap_info = {0};
     swap_info.sType                    = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swap_info.surface                  = g_renderer.surface;
@@ -232,11 +234,11 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
     swap_info.compositeAlpha           = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     swap_info.imageUsage               = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    if (family_indices.graphics != family_indices.presentation)
+    if (g_renderer.queue_ids.graphics != g_renderer.queue_ids.presentation)
     {
         swap_info.imageSharingMode      = VK_SHARING_MODE_CONCURRENT;
         swap_info.queueFamilyIndexCount = 2;
-        swap_info.pQueueFamilyIndices   = (u32_t *)(&family_indices);
+        swap_info.pQueueFamilyIndices   = (u32_t *)(&g_renderer.queue_ids);
     }
     else
     {
@@ -275,6 +277,31 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
         create_result = vkCreateImageView(g_renderer.device, &view_info, NULL, &g_renderer.swapchain_img_views[i]);
         EMBER_ASSERT(create_result == VK_SUCCESS);
     }
+}
+
+internal void
+renderer_vk_create_command_pool()
+{
+    VkCommandPoolCreateInfo pool_info = {0};
+    pool_info.sType                   = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    pool_info.flags                   = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    pool_info.queueFamilyIndex        = g_renderer.queue_ids.graphics;
+
+    VkResult create_result = vkCreateCommandPool(g_renderer.device, &pool_info, NULL, &g_renderer.command_pool);
+    EMBER_ASSERT(create_result == VK_SUCCESS);
+}
+
+internal void
+renderer_vk_create_command_buffers()
+{
+    VkCommandBufferAllocateInfo alloc_info = {0};
+    alloc_info.sType                       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    alloc_info.commandPool                 = g_renderer.command_pool;
+    alloc_info.level                       = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    alloc_info.commandBufferCount          = RENDERER_VK_FRAMES_IN_FLIGHT;
+
+    VkResult alloc_result = vkAllocateCommandBuffers(g_renderer.device, &alloc_info, (VkCommandBuffer *)&g_renderer.command_buffers);
+    EMBER_ASSERT(alloc_result == VK_SUCCESS);
 }
 
 internal void
@@ -592,15 +619,15 @@ renderer_vk_swapchain_find_extent(platform_handle_t window_handle)
 }
 
 internal renderer_vk_queue_indices_t
-renderer_vk_find_queue_indices(VkPhysicalDevice device)
+renderer_vk_find_queue_indices()
 {
     scratch_t scratch = arena_scratch_begin(g_renderer.arena);
 
     u32_t family_count;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, NULL);
+    vkGetPhysicalDeviceQueueFamilyProperties(g_renderer.physical_device, &family_count, NULL);
 
     VkQueueFamilyProperties* family_props = MEMORY_PUSH(scratch.arena, VkQueueFamilyProperties, family_count);
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, family_props);
+    vkGetPhysicalDeviceQueueFamilyProperties(g_renderer.physical_device, &family_count, family_props);
 
     b32_t graphics_found = EMBER_FALSE;
     b32_t present_found  = EMBER_FALSE;
@@ -610,7 +637,7 @@ renderer_vk_find_queue_indices(VkPhysicalDevice device)
     for (u32_t i = 0; i < family_count; i++)
     {
         VkBool32 present_support = VK_FALSE;
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, g_renderer.surface, &present_support);
+        vkGetPhysicalDeviceSurfaceSupportKHR(g_renderer.physical_device, i, g_renderer.surface, &present_support);
 
         b32_t graphics_support = family_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT;
 
