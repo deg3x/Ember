@@ -15,9 +15,9 @@ layout(location = 3) in vec2 uv;
 layout(location = 0) out vec3 frag_color;
 
 vec2 positions[3] = {
-    vec2( 0.0, -0.5),
-    vec2( 0.5,  0.5),
-    vec2(-0.5,  0.5),
+    vec2( 0.0, -0.6),
+    vec2(-0.5,  0.6),
+    vec2( 0.5,  0.6),
 };
 
 vec3 colors[3] = {

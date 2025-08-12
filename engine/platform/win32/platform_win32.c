@@ -361,6 +361,10 @@ win32_window_message_callback(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_para
         }
         case WM_PAINT:
         {
+            PAINTSTRUCT paint = {0};
+            BeginPaint(hwnd, &paint);
+            renderer_tick();
+            EndPaint(hwnd, &paint);
             return 0;
         }
     }
@@ -381,7 +385,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cm
 
     while (platform_gfx_process_events())
     {
-        renderer_tick();
+
     }
 
     renderer_destroy();

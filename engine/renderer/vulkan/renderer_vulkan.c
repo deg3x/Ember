@@ -108,10 +108,7 @@ renderer_tick()
 internal void
 renderer_destroy()
 {
-    for (int i = 0; i < g_renderer.pipeline_count; i++)
-    {
-        renderer_pipeline_destroy(g_renderer.pipelines + i);
-    }
+    vkDeviceWaitIdle(g_renderer.device);
 
     for (u32_t i = 0; i < RENDERER_VK_FRAMES_IN_FLIGHT; i++)
     {
@@ -119,7 +116,14 @@ renderer_destroy()
         vkDestroySemaphore(g_renderer.device, g_renderer.sem_render_end[i], NULL);
         vkDestroyFence(g_renderer.device, g_renderer.fence_in_flight[i], NULL);
     }
+
     vkDestroyCommandPool(g_renderer.device, g_renderer.command_pool, NULL);
+
+    for (int i = 0; i < g_renderer.pipeline_count; i++)
+    {
+        renderer_pipeline_destroy(g_renderer.pipelines + i);
+    }
+
     for (u32_t i = 0; i < RENDERER_VK_SWAP_IMG_COUNT; i++)
     {
         vkDestroyImageView(g_renderer.device, g_renderer.swapchain_img_views[i], NULL);
@@ -327,6 +331,7 @@ renderer_vk_create_device()
     VkPhysicalDeviceVulkan13Features feats_13 = {0};
     feats_13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     feats_13.dynamicRendering = VK_TRUE;
+    feats_13.synchronization2 = VK_TRUE;
 
     VkDeviceCreateInfo device_info      = {0};
     device_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1000,7 +1005,7 @@ renderer_vk_device_is_suitable(VkPhysicalDevice device)
 
     b32_t exts_supported = renderer_vk_check_device_extensions(device);
     b32_t prop_supported = (props.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
-    b32_t feat_supported = feats.features.samplerAnisotropy && feats_13.dynamicRendering;
+    b32_t feat_supported = feats.features.samplerAnisotropy && feats_13.dynamicRendering && feats_13.synchronization2;
 
     b32_t result = 
         exts_supported &&
