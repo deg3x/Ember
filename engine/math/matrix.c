@@ -208,7 +208,7 @@ mat4_from_euler(vec3_t* angles)
     f32_t sin_y = math_sin(angles->y);
     f32_t sin_z = math_sin(angles->z);
 
-    mat4_t result = {};
+    mat4_t result = {0};
 
     result.m[0][0] =  cos_y * cos_z;
     result.m[0][1] =  sin_z * cos_y;
@@ -230,7 +230,7 @@ mat4_from_euler(vec3_t* angles)
 internal mat4_t
 mat4_from_pitch(f32_t pitch)
 {
-    mat4_t result = {};
+    mat4_t result = {0};
 
     f32_t angle_cos = math_cos(pitch);
     f32_t angle_sin = math_sin(pitch);
@@ -248,7 +248,7 @@ mat4_from_pitch(f32_t pitch)
 internal mat4_t
 mat4_from_yaw(f32_t yaw)
 {
-    mat4_t result = {};
+    mat4_t result = {0};
 
     f32_t angle_cos = math_cos(yaw);
     f32_t angle_sin = math_sin(yaw);
@@ -266,7 +266,7 @@ mat4_from_yaw(f32_t yaw)
 internal mat4_t
 mat4_from_roll(f32_t roll)
 {
-    mat4_t result = {};
+    mat4_t result = {0};
 
     f32_t angle_cos = math_cos(roll);
     f32_t angle_sin = math_sin(roll);
@@ -416,7 +416,7 @@ mat4_perspective(f32_t fov_x, f32_t aspect_ratio, f32_t clip_near, f32_t clip_fa
     f32_t inv_aspect_ratio = 1.0f / aspect_ratio;
     f32_t far_minus_near   = clip_far - clip_near;
 
-    mat4_t result = {};
+    mat4_t result = {0};
 
     result.m[0][0] = inv_half_fov_tan * inv_aspect_ratio;
     result.m[1][1] = inv_half_fov_tan;
@@ -430,7 +430,7 @@ mat4_perspective(f32_t fov_x, f32_t aspect_ratio, f32_t clip_near, f32_t clip_fa
 internal mat4_t
 mat4_orthographic(f32_t clip_left, f32_t clip_right, f32_t clip_bottom, f32_t clip_top, f32_t clip_near, f32_t clip_far)
 {
-    mat4_t result = {};
+    mat4_t result = {0};
 
     f32_t inv_right_minus_left = 1.0f / (clip_right - clip_left);
     f32_t inv_top_minus_bottom = 1.0f / (clip_top - clip_bottom);

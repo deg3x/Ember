@@ -106,7 +106,7 @@ platform_file_open(const char* file_path, platform_file_flags_t flags)
         NULL
     );
 
-    platform_handle_t result = {};
+    platform_handle_t result = {0};
 
     if (file_handle == INVALID_HANDLE_VALUE)
     {
@@ -134,7 +134,7 @@ platform_file_close(platform_handle_t file_handle)
 internal platform_file_props_t
 platform_file_props(platform_handle_t file_handle)
 {
-    platform_file_props_t result = {};
+    platform_file_props_t result = {0};
 
     if (file_handle.hnd == NULL)
     {
@@ -241,7 +241,7 @@ platform_gfx_init()
 {
     g_win32_gfx_state.instance = GetModuleHandle(NULL);
 
-    WNDCLASSEX window_class    = {};
+    WNDCLASSEX window_class    = {0};
     window_class.cbSize        = sizeof(WNDCLASSEX);
     window_class.style         = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
     window_class.lpfnWndProc   = win32_window_message_callback;
@@ -262,7 +262,7 @@ platform_gfx_init()
 internal b32_t
 platform_gfx_process_events()
 {
-    MSG msg = {};
+    MSG msg = {0};
 
     if (GetMessage(&msg, NULL, 0, 0) == 0)
     {
@@ -278,7 +278,7 @@ platform_gfx_process_events()
 internal platform_handle_t
 platform_gfx_window_create(const char* window_name)
 {
-    win32_window_t window = {};
+    win32_window_t window = {0};
 
     HWND window_handle = CreateWindowEx(
         0,
@@ -302,7 +302,7 @@ platform_gfx_window_create(const char* window_name)
     window.handle     = window_handle;
     window.device_ctx = GetDC(window_handle);
 
-    platform_handle_t handle = { window_handle};
+    platform_handle_t handle = {window_handle};
 
     return handle;
 }

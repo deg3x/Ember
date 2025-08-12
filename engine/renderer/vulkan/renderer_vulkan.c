@@ -39,6 +39,7 @@ renderer_destroy()
 internal void
 renderer_pipeline_init(renderer_pipeline_t* pipeline)
 {
+    renderer_vk_pipeline_create_descriptor_set_layout(pipeline);
     renderer_vk_pipeline_create_graphics_pipeline_layout(pipeline);
     renderer_vk_pipeline_create_graphics_pipeline(pipeline);
 }
@@ -53,15 +54,27 @@ renderer_pipeline_destroy(renderer_pipeline_t* pipeline)
 internal void
 renderer_vk_create_instance()
 {
+    u32_t vk_api_version = VK_API_VERSION_1_4;
+
     // TODO(KB): Provide appropriate names/versions for app/engine
-    VkApplicationInfo app_info  = {};
+    VkApplicationInfo app_info  = {0};
     app_info.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pNext              = NULL;
     app_info.pApplicationName   = NULL;
     app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
     app_info.pEngineName        = "Ember Engine";
     app_info.engineVersion      = VK_MAKE_VERSION(0, 0, 1);
-    app_info.apiVersion         = VK_API_VERSION_1_0;
+    app_info.apiVersion         = vk_api_version;
+
+    PFN_vkEnumerateInstanceVersion vk_api_version_func = 
+        (PFN_vkEnumerateInstanceVersion) vkGetInstanceProcAddr(NULL, "vkEnumerateInstanceVersion");
+
+    // TODO(KB): We probably want to notify the user of unsupported/unavailable SDK version
+    EMBER_ASSERT(vk_api_version_func);
+    u32_t vk_api_version_supported = VK_API_VERSION_1_0;
+    vk_api_version_func(&vk_api_version_supported);
+
+    EMBER_ASSERT(vk_api_version_supported >= vk_api_version);
 
     b32_t exts_found = renderer_vk_check_instance_extensions();
     EMBER_ASSERT(exts_found);
@@ -70,7 +83,7 @@ renderer_vk_create_instance()
     b32_t layers_found = renderer_vk_check_validation_layers();
 #endif
 
-    VkInstanceCreateInfo instance_info    = {};
+    VkInstanceCreateInfo instance_info    = {0};
     instance_info.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instance_info.pApplicationInfo        = &app_info;
     instance_info.enabledExtensionCount   = ARRAY_COUNT(g_instance_extensions);
@@ -96,7 +109,7 @@ internal void
 renderer_vk_create_surface(platform_handle_t window_handle)
 {
 #if PLATFORM_WINDOWS
-    VkWin32SurfaceCreateInfoKHR surface_info = {};
+    VkWin32SurfaceCreateInfoKHR surface_info = {0};
     surface_info.sType                       = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
     surface_info.hinstance                   = platform_get_instance_handle().hnd;
     surface_info.hwnd                        = window_handle.hnd;
@@ -118,10 +131,12 @@ renderer_vk_create_physical_device()
     u32_t device_count = 0;
     vkEnumeratePhysicalDevices(g_renderer.instance, &device_count, NULL);
 
+    EMBER_ASSERT(device_count > 0);
+
     VkPhysicalDevice* devices = MEMORY_PUSH(scratch.arena, VkPhysicalDevice, device_count);
     vkEnumeratePhysicalDevices(g_renderer.instance, &device_count, devices);
 
-    for (int i = 0; i < ARRAY_COUNT(devices); i++)
+    for (u32_t i = 0; i < device_count; i++)
     {
         if (renderer_vk_device_is_suitable(devices[i]))
         {
@@ -156,14 +171,19 @@ renderer_vk_create_device()
     }
 
     // TODO(KB): Connect this to the feature check in ...device_is_suitable()
-    VkPhysicalDeviceFeatures features = {};
-    features.samplerAnisotropy = VK_TRUE;
+    VkPhysicalDeviceFeatures feats = {0};
+    feats.samplerAnisotropy = VK_TRUE;
 
-    VkDeviceCreateInfo device_info      = {};
+    VkPhysicalDeviceVulkan13Features feats_13 = {0};
+    feats_13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    feats_13.dynamicRendering = VK_TRUE;
+
+    VkDeviceCreateInfo device_info      = {0};
     device_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_info.pNext                   = &feats_13;
     device_info.queueCreateInfoCount    = queue_count;
     device_info.pQueueCreateInfos       = queue_infos;
-    device_info.pEnabledFeatures        = &features;
+    device_info.pEnabledFeatures        = &feats;
     device_info.enabledExtensionCount   = ARRAY_COUNT(g_device_extensions);
     device_info.ppEnabledExtensionNames = g_device_extensions;
 #if RHI_VK_VALIDATIONS_ENABLED
@@ -197,7 +217,7 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
 
     renderer_vk_queue_indices_t family_indices = renderer_vk_find_queue_indices(g_renderer.physical_device);
 
-    VkSwapchainCreateInfoKHR swap_info = {};
+    VkSwapchainCreateInfoKHR swap_info = {0};
     swap_info.sType                    = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swap_info.surface                  = g_renderer.surface;
     swap_info.minImageCount            = img_count;
@@ -233,7 +253,7 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
     g_renderer.swapchain_images    = MEMORY_PUSH(g_renderer.arena, VkImage, img_count);
     g_renderer.swapchain_img_views = MEMORY_PUSH(g_renderer.arena, VkImageView, img_count);
 
-    VkImageViewCreateInfo view_info           = {};
+    VkImageViewCreateInfo view_info           = {0};
     view_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     view_info.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
     view_info.format                          = g_renderer.swapchain_img_fmt;
@@ -260,14 +280,14 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
 internal void
 renderer_vk_pipeline_create_descriptor_set_layout(renderer_pipeline_t* pipeline)
 {
-    VkDescriptorSetLayoutBinding bindings[1] = {};
+    VkDescriptorSetLayoutBinding bindings[1] = {0};
     bindings[0].binding                      = 0;
     bindings[0].descriptorCount              = 1;
     bindings[0].descriptorType               = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[0].stageFlags                   = VK_SHADER_STAGE_VERTEX_BIT;
     bindings[0].pImmutableSamplers           = NULL;
 
-    VkDescriptorSetLayoutCreateInfo binding_info = {};
+    VkDescriptorSetLayoutCreateInfo binding_info = {0};
     binding_info.sType                           = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     binding_info.bindingCount                    = ARRAY_COUNT(bindings);
     binding_info.pBindings                       = bindings;
@@ -279,7 +299,7 @@ renderer_vk_pipeline_create_descriptor_set_layout(renderer_pipeline_t* pipeline)
 internal void
 renderer_vk_pipeline_create_graphics_pipeline_layout(renderer_pipeline_t* pipeline)
 {
-    VkPipelineLayoutCreateInfo layout_info = {};
+    VkPipelineLayoutCreateInfo layout_info = {0};
     layout_info.sType                      = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layout_info.setLayoutCount             = 1;
     layout_info.pSetLayouts                = &pipeline->descriptor_set_layout;
@@ -300,10 +320,10 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
     u64_t vert_size = platform_file_data("./triangle_vert.spv", vert);
     u64_t frag_size = platform_file_data("./triangle_frag.spv", frag);
 
-    VkShaderModule vert_module = renderer_vk_pipeline_create_shader_module((char *)vert, vert_size);
-    VkShaderModule frag_module = renderer_vk_pipeline_create_shader_module((char *)frag, frag_size);
+    VkShaderModule vert_module = renderer_vk_pipeline_create_shader_module(vert, vert_size);
+    VkShaderModule frag_module = renderer_vk_pipeline_create_shader_module(frag, frag_size);
 
-    VkPipelineShaderStageCreateInfo shader_info[2] = {};
+    VkPipelineShaderStageCreateInfo shader_info[2] = {0};
     shader_info[0].sType                           = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shader_info[0].stage                           = VK_SHADER_STAGE_VERTEX_BIT;
     shader_info[0].pName                           = "main";
@@ -316,12 +336,12 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
     shader_info[1].module                          = frag_module;
     shader_info[1].pSpecializationInfo             = NULL;
 
-    VkVertexInputBindingDescription vertex_bindings = {};
+    VkVertexInputBindingDescription vertex_bindings = {0};
     vertex_bindings.binding                         = 0;
     vertex_bindings.stride                          = sizeof(vertex_t);
     vertex_bindings.inputRate                       = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    VkVertexInputAttributeDescription vertex_attr[VERTEX_ATTR_TYPE_count] = {};
+    VkVertexInputAttributeDescription vertex_attr[VERTEX_ATTR_TYPE_count] = {0};
     vertex_attr[VERTEX_ATTR_TYPE_position].binding                        = 0;
     vertex_attr[VERTEX_ATTR_TYPE_position].location                       = 0;
     vertex_attr[VERTEX_ATTR_TYPE_position].offset                         = offsetof(vertex_t, position);
@@ -342,14 +362,14 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
     vertex_attr[VERTEX_ATTR_TYPE_uv].offset                               = offsetof(vertex_t, uv);
     vertex_attr[VERTEX_ATTR_TYPE_uv].format                               = VK_FORMAT_R32G32_SFLOAT;
 
-    VkPipelineVertexInputStateCreateInfo vertex_input_info = {};
+    VkPipelineVertexInputStateCreateInfo vertex_input_info = {0};
     vertex_input_info.sType                                = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertex_input_info.vertexBindingDescriptionCount        = 1;
     vertex_input_info.pVertexBindingDescriptions           = &vertex_bindings;
     vertex_input_info.vertexAttributeDescriptionCount      = VERTEX_ATTR_TYPE_count;
     vertex_input_info.pVertexAttributeDescriptions         = vertex_attr;
 
-    VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {};
+    VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {0};
     input_assembly_info.sType                                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     input_assembly_info.topology                               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     input_assembly_info.primitiveRestartEnable                 = VK_FALSE;
@@ -360,17 +380,17 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR
     };
-    VkPipelineDynamicStateCreateInfo dynamic_info = {};
+    VkPipelineDynamicStateCreateInfo dynamic_info = {0};
     dynamic_info.sType                            = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     dynamic_info.dynamicStateCount                = ARRAY_COUNT(dynamic_states);
     dynamic_info.pDynamicStates                   = dynamic_states;
 
-    VkPipelineViewportStateCreateInfo viewport_info = {};
+    VkPipelineViewportStateCreateInfo viewport_info = {0};
     viewport_info.sType                             = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewport_info.viewportCount                     = 1;
     viewport_info.scissorCount                      = 1;
 
-    VkPipelineRasterizationStateCreateInfo rasterizer_info = {};
+    VkPipelineRasterizationStateCreateInfo rasterizer_info = {0};
     rasterizer_info.sType                                  = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer_info.depthClampEnable                       = VK_FALSE;
     rasterizer_info.rasterizerDiscardEnable                = VK_FALSE;
@@ -383,7 +403,7 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
     rasterizer_info.depthBiasClamp                         = 0.0f;
     rasterizer_info.depthBiasSlopeFactor                   = 0.0f;
 
-    VkPipelineMultisampleStateCreateInfo multisample_info = {};
+    VkPipelineMultisampleStateCreateInfo multisample_info = {0};
     multisample_info.sType                                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisample_info.sampleShadingEnable                  = VK_FALSE;
     multisample_info.rasterizationSamples                 = VK_SAMPLE_COUNT_1_BIT;
@@ -392,10 +412,10 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
     multisample_info.alphaToCoverageEnable                = VK_FALSE;
     multisample_info.alphaToOneEnable                     = VK_FALSE;
 
-    VkStencilOpState stencil_state_front = {};
-    VkStencilOpState stencil_state_back  = {};
+    VkStencilOpState stencil_state_front = {0};
+    VkStencilOpState stencil_state_back  = {0};
 
-    VkPipelineDepthStencilStateCreateInfo depth_stencil_info = {};
+    VkPipelineDepthStencilStateCreateInfo depth_stencil_info = {0};
     depth_stencil_info.sType                                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depth_stencil_info.depthTestEnable                       = VK_TRUE;
     depth_stencil_info.depthWriteEnable                      = VK_TRUE;
@@ -407,7 +427,7 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
     depth_stencil_info.front                                 = stencil_state_front;
     depth_stencil_info.back                                  = stencil_state_back;
 
-    VkPipelineColorBlendAttachmentState color_blend_attachment = {};
+    VkPipelineColorBlendAttachmentState color_blend_attachment = {0};
     color_blend_attachment.blendEnable                         = VK_FALSE;
     color_blend_attachment.srcColorBlendFactor                 = VK_BLEND_FACTOR_ONE;
     color_blend_attachment.dstColorBlendFactor                 = VK_BLEND_FACTOR_ZERO;
@@ -420,7 +440,7 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
                                                                  VK_COLOR_COMPONENT_B_BIT |
                                                                  VK_COLOR_COMPONENT_A_BIT;
 
-    VkPipelineColorBlendStateCreateInfo color_blend_info = {};
+    VkPipelineColorBlendStateCreateInfo color_blend_info = {0};
     color_blend_info.sType                               = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     color_blend_info.logicOpEnable                       = VK_FALSE;
     color_blend_info.logicOp                             = VK_LOGIC_OP_COPY;
@@ -431,8 +451,17 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
     color_blend_info.blendConstants[2]                   = 0.0f;
     color_blend_info.blendConstants[3]                   = 0.0f;
 
-    VkGraphicsPipelineCreateInfo graphics_pipeline_info = {};
+    VkPipelineRenderingCreateInfo rendering_info = {0};
+    rendering_info.sType                         = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    rendering_info.viewMask                      = 0;
+    rendering_info.colorAttachmentCount          = 1;
+    rendering_info.pColorAttachmentFormats       = &g_renderer.swapchain_img_fmt;
+    rendering_info.depthAttachmentFormat         = VK_FORMAT_D32_SFLOAT; // TODO(KB): g_renderer.depth_img_fmt
+    rendering_info.stencilAttachmentFormat       = VK_FORMAT_UNDEFINED;
+
+    VkGraphicsPipelineCreateInfo graphics_pipeline_info = {0};
     graphics_pipeline_info.sType                        = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    graphics_pipeline_info.pNext                        = &rendering_info;
     graphics_pipeline_info.stageCount                   = 2;
     graphics_pipeline_info.pStages                      = shader_info;
     graphics_pipeline_info.pVertexInputState            = &vertex_input_info;
@@ -459,9 +488,9 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
 }
 
 internal VkShaderModule
-renderer_vk_pipeline_create_shader_module(const char* code, u64_t code_size)
+renderer_vk_pipeline_create_shader_module(const u8_t* code, u64_t code_size)
 {
-    VkShaderModuleCreateInfo module_info = {};
+    VkShaderModuleCreateInfo module_info = {0};
     module_info.sType                    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     module_info.codeSize                 = code_size;
     module_info.pCode                    = (u32_t *)code;
@@ -487,17 +516,33 @@ renderer_vk_swapchain_find_format()
     VkSurfaceFormatKHR* formats = MEMORY_PUSH(scratch.arena, VkSurfaceFormatKHR, format_count);
     vkGetPhysicalDeviceSurfaceFormatsKHR(g_renderer.physical_device, g_renderer.surface, &format_count, formats);
 
+    VkSurfaceFormatKHR result = {
+        VK_FORMAT_B8G8R8_SRGB,
+        VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
+    };
+
+    if (format_count == 1 && formats[0].format == VK_FORMAT_UNDEFINED)
+    {
+        arena_scratch_end(scratch);
+
+        return result;
+    }
+
     for (u32_t i = 0; i < format_count; i++)
     {
-        if (formats[i].format == VK_FORMAT_B8G8R8_SRGB && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        if (formats[i].format == result.format && formats[i].colorSpace == result.colorSpace)
         {
             arena_scratch_end(scratch);
-            return formats[i];
+
+            return result;
         }
     }
 
+    result = formats[0];
+
     arena_scratch_end(scratch);
-    return formats[0];
+
+    return result;
 }
 
 internal VkPresentModeKHR
@@ -538,10 +583,10 @@ renderer_vk_swapchain_find_extent(platform_handle_t window_handle)
 
     platform_window_size_t client_size = platform_gfx_window_client_get_size(window_handle);
 
-    VkExtent2D extent = {
-        client_size.width,
-        client_size.height
-    };
+    VkExtent2D extent;
+
+    extent.width  = CLAMP(client_size.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+    extent.height = CLAMP(client_size.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
 
     return extent;
 }
@@ -557,26 +602,39 @@ renderer_vk_find_queue_indices(VkPhysicalDevice device)
     VkQueueFamilyProperties* family_props = MEMORY_PUSH(scratch.arena, VkQueueFamilyProperties, family_count);
     vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, family_props);
 
-    b8_t graphics_found = EMBER_FALSE;
-    b8_t present_found  = EMBER_FALSE;
-    u32_t graphics      = 0;
-    u32_t present       = 0;
+    b32_t graphics_found = EMBER_FALSE;
+    b32_t present_found  = EMBER_FALSE;
+    u32_t graphics_id    = 0;
+    u32_t present_id     = 0;
 
-    for (u32_t i = 0; (i < family_count) && !(graphics_found && present_found); i++)
+    for (u32_t i = 0; i < family_count; i++)
     {
         VkBool32 present_support = VK_FALSE;
         vkGetPhysicalDeviceSurfaceSupportKHR(device, i, g_renderer.surface, &present_support);
 
-        if (family_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        b32_t graphics_support = family_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT;
+
+        if (graphics_support && present_support)
         {
             graphics_found = EMBER_TRUE;
-            graphics       = i;
+            graphics_id    = i;
+
+            present_found = EMBER_TRUE;
+            present_id    = i;
+
+            break;
         }
 
-        if (present_support)
+        if (graphics_support && !graphics_found)
+        {
+            graphics_found = EMBER_TRUE;
+            graphics_id    = i;
+        }
+
+        if (present_support && !present_found)
         {
             present_found = EMBER_TRUE;
-            present       = i;
+            present_id    = i;
         }
     }
 
@@ -585,8 +643,8 @@ renderer_vk_find_queue_indices(VkPhysicalDevice device)
     arena_scratch_end(scratch);
 
     renderer_vk_queue_indices_t result = {
-        graphics,
-        present
+        graphics_id,
+        present_id
     };
 
     return result;
@@ -691,15 +749,22 @@ renderer_vk_check_device_extensions(VkPhysicalDevice device)
 internal b32_t
 renderer_vk_device_is_suitable(VkPhysicalDevice device)
 {
-    VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties(device, &properties);
+    VkPhysicalDeviceProperties2 props = {0};
+    props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 
-    VkPhysicalDeviceFeatures features;
-    vkGetPhysicalDeviceFeatures(device, &features);
+    VkPhysicalDeviceVulkan13Features feats_13 = {0};
+    feats_13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+
+    VkPhysicalDeviceFeatures2 feats ={0};
+    feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    feats.pNext = &feats_13;
+
+    vkGetPhysicalDeviceProperties2(device, &props);
+    vkGetPhysicalDeviceFeatures2(device, &feats);
 
     b32_t exts_supported = renderer_vk_check_device_extensions(device);
-    b32_t prop_supported = (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
-    b32_t feat_supported = features.samplerAnisotropy;
+    b32_t prop_supported = (props.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
+    b32_t feat_supported = feats.features.samplerAnisotropy && feats_13.dynamicRendering;
 
     b32_t result = 
         exts_supported &&

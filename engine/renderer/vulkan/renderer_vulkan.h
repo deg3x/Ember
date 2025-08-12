@@ -58,10 +58,10 @@ internal void renderer_vk_create_physical_device();
 internal void renderer_vk_create_device();
 internal void renderer_vk_create_swapchain(platform_handle_t window_handle);
 
-internal void renderer_vk_pipeline_create_descriptor_set_layout(renderer_pipeline_t* pipeline);
-internal void renderer_vk_pipeline_create_graphics_pipeline_layout(renderer_pipeline_t* pipeline);
-internal void renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline);
-internal VkShaderModule renderer_vk_pipeline_create_shader_module(const char* code, u64_t code_size);
+internal void           renderer_vk_pipeline_create_descriptor_set_layout(renderer_pipeline_t* pipeline);
+internal void           renderer_vk_pipeline_create_graphics_pipeline_layout(renderer_pipeline_t* pipeline);
+internal void           renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline);
+internal VkShaderModule renderer_vk_pipeline_create_shader_module(const u8_t* code, u64_t code_size);
 
 internal VkSurfaceFormatKHR renderer_vk_swapchain_find_format();
 internal VkPresentModeKHR   renderer_vk_swapchain_find_present();

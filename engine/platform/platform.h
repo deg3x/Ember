@@ -40,7 +40,7 @@ struct platform_file_props_t
     u64_t size;
 };
 
-global platform_info_t g_platform_info = {};
+global platform_info_t g_platform_info;
 
 internal void platform_info_init();
 internal void platform_abort(i32_t exit_code);
