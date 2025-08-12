@@ -381,7 +381,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cm
 
     while (platform_gfx_process_events())
     {
-
+        renderer_tick();
     }
 
     renderer_destroy();

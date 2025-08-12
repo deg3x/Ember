@@ -7,15 +7,102 @@ renderer_init(platform_handle_t window_handle)
     renderer_vk_create_instance();
     renderer_vk_create_surface(window_handle);
     renderer_vk_create_physical_device();
+    renderer_vk_create_queue_ids();
     renderer_vk_create_device();
     renderer_vk_create_swapchain(window_handle);
     renderer_vk_create_command_pool();
     renderer_vk_create_command_buffers();
+    renderer_vk_create_sync_primitives();
 
     g_renderer.pipelines      = MEMORY_PUSH_ZERO(g_renderer.arena, renderer_pipeline_t, 1);
     g_renderer.pipeline_count = 1;
     
     renderer_pipeline_init(g_renderer.pipelines);
+}
+
+internal void
+renderer_tick()
+{
+    persist u32_t frame_id = 0;
+
+    vkWaitForFences(g_renderer.device, 1, &g_renderer.fence_in_flight[frame_id], VK_TRUE, UINT64_MAX);
+
+    u32_t img_id;
+    VkResult vk_result = vkAcquireNextImageKHR(
+        g_renderer.device,
+        g_renderer.swapchain,
+        UINT64_MAX,
+        g_renderer.sem_img_avail[frame_id],
+        VK_NULL_HANDLE, &img_id
+    );
+
+    if (vk_result == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        // TODO(KB): Recreate swapchain
+    }
+    else
+    {
+        EMBER_ASSERT(vk_result == VK_SUCCESS || vk_result == VK_SUBOPTIMAL_KHR);
+    }
+
+    vkResetFences(g_renderer.device, 1, &g_renderer.fence_in_flight[frame_id]);
+    vkResetCommandBuffer(g_renderer.command_buffers[frame_id], 0);
+
+    renderer_vk_command_buffer_record(&g_renderer.pipelines[0], frame_id, img_id);
+
+    VkSemaphoreSubmitInfo wait_sem_info = {0};
+    wait_sem_info.sType                 = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    wait_sem_info.semaphore             = g_renderer.sem_img_avail[frame_id];
+    wait_sem_info.value                 = 0;
+    wait_sem_info.stageMask             = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    wait_sem_info.deviceIndex           = 0;
+
+    VkSemaphoreSubmitInfo sgnl_sem_info = {0};
+    sgnl_sem_info.sType                 = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    sgnl_sem_info.semaphore             = g_renderer.sem_render_end[frame_id];
+    sgnl_sem_info.value                 = 0;
+    sgnl_sem_info.stageMask             = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
+    sgnl_sem_info.deviceIndex           = 0;
+
+    VkCommandBufferSubmitInfo cmd_submit_info = {0};
+    cmd_submit_info.sType                     = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    cmd_submit_info.commandBuffer             = g_renderer.command_buffers[frame_id];
+    cmd_submit_info.deviceMask                = 0;
+
+    VkSubmitInfo2 submit_info            = {0};
+    submit_info.sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submit_info.waitSemaphoreInfoCount   = 1;
+    submit_info.pWaitSemaphoreInfos      = &wait_sem_info;
+    submit_info.commandBufferInfoCount   = 1;
+    submit_info.pCommandBufferInfos      = &cmd_submit_info;
+    submit_info.signalSemaphoreInfoCount = 1;
+    submit_info.pSignalSemaphoreInfos    = &sgnl_sem_info;
+
+    vk_result = vkQueueSubmit2(g_renderer.graphics_queue, 1, &submit_info, g_renderer.fence_in_flight[frame_id]);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
+
+    VkPresentInfoKHR present_info   = {0};
+    present_info.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.waitSemaphoreCount = 1;
+    present_info.pWaitSemaphores    = &g_renderer.sem_render_end[frame_id];
+    present_info.swapchainCount     = 1;
+    present_info.pSwapchains        = &g_renderer.swapchain;
+    present_info.pImageIndices      = &img_id;
+    present_info.pResults           = NULL;
+
+    vk_result = vkQueuePresentKHR(g_renderer.present_queue, &present_info);
+
+    // TODO(KB): Check for window resized
+    if (vk_result == VK_ERROR_OUT_OF_DATE_KHR || vk_result == VK_SUBOPTIMAL_KHR)
+    {
+        // TODO(KB): Recreate swapchain
+    }
+    else
+    {
+        EMBER_ASSERT(vk_result == VK_SUCCESS);
+    }
+
+    frame_id = (frame_id + 1) % RENDERER_VK_FRAMES_IN_FLIGHT;
 }
 
 internal void
@@ -26,6 +113,12 @@ renderer_destroy()
         renderer_pipeline_destroy(g_renderer.pipelines + i);
     }
 
+    for (u32_t i = 0; i < RENDERER_VK_FRAMES_IN_FLIGHT; i++)
+    {
+        vkDestroySemaphore(g_renderer.device, g_renderer.sem_img_avail[i], NULL);
+        vkDestroySemaphore(g_renderer.device, g_renderer.sem_render_end[i], NULL);
+        vkDestroyFence(g_renderer.device, g_renderer.fence_in_flight[i], NULL);
+    }
     vkDestroyCommandPool(g_renderer.device, g_renderer.command_pool, NULL);
     for (u32_t i = 0; i < RENDERER_VK_SWAP_IMG_COUNT; i++)
     {
@@ -155,10 +248,63 @@ renderer_vk_create_physical_device()
 }
 
 internal void
+renderer_vk_create_queue_ids()
+{
+    scratch_t scratch = arena_scratch_begin(g_renderer.arena);
+
+    u32_t family_count;
+    vkGetPhysicalDeviceQueueFamilyProperties(g_renderer.physical_device, &family_count, NULL);
+
+    VkQueueFamilyProperties* family_props = MEMORY_PUSH(scratch.arena, VkQueueFamilyProperties, family_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(g_renderer.physical_device, &family_count, family_props);
+
+    b32_t graphics_found = EMBER_FALSE;
+    b32_t present_found  = EMBER_FALSE;
+    u32_t graphics_id    = 0;
+    u32_t present_id     = 0;
+
+    for (u32_t i = 0; i < family_count; i++)
+    {
+        VkBool32 present_support = VK_FALSE;
+        vkGetPhysicalDeviceSurfaceSupportKHR(g_renderer.physical_device, i, g_renderer.surface, &present_support);
+
+        b32_t graphics_support = family_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT;
+
+        if (graphics_support && present_support)
+        {
+            graphics_found = EMBER_TRUE;
+            graphics_id    = i;
+
+            present_found = EMBER_TRUE;
+            present_id    = i;
+
+            break;
+        }
+
+        if (graphics_support && !graphics_found)
+        {
+            graphics_found = EMBER_TRUE;
+            graphics_id    = i;
+        }
+
+        if (present_support && !present_found)
+        {
+            present_found = EMBER_TRUE;
+            present_id    = i;
+        }
+    }
+
+    EMBER_ASSERT(graphics_found && present_found);
+
+    arena_scratch_end(scratch);
+
+    g_renderer.queue_ids.graphics     = graphics_id;
+    g_renderer.queue_ids.presentation = present_id;
+}
+
+internal void
 renderer_vk_create_device()
 {
-    renderer_vk_find_queue_indices();
-
     scratch_t scratch = arena_scratch_begin(g_renderer.arena);
 
     u32_t queue_count = (g_renderer.queue_ids.graphics == g_renderer.queue_ids.presentation) ? 1 : 2;
@@ -302,6 +448,31 @@ renderer_vk_create_command_buffers()
 
     VkResult alloc_result = vkAllocateCommandBuffers(g_renderer.device, &alloc_info, (VkCommandBuffer *)&g_renderer.command_buffers);
     EMBER_ASSERT(alloc_result == VK_SUCCESS);
+}
+
+internal void
+renderer_vk_create_sync_primitives()
+{
+    VkSemaphoreCreateInfo sem_info = {0};
+    sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fence_info = {0};
+    fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    for (u32_t i = 0; i < RENDERER_VK_FRAMES_IN_FLIGHT; i++)
+    {
+        VkResult create_result;
+
+        create_result = vkCreateSemaphore(g_renderer.device, &sem_info, NULL, &g_renderer.sem_img_avail[i]);
+        EMBER_ASSERT(create_result == VK_SUCCESS);
+
+        create_result = vkCreateSemaphore(g_renderer.device, &sem_info, NULL, &g_renderer.sem_render_end[i]);
+        EMBER_ASSERT(create_result == VK_SUCCESS);
+
+        create_result = vkCreateFence(g_renderer.device, &fence_info, NULL, &g_renderer.fence_in_flight[i]);
+        EMBER_ASSERT(create_result == VK_SUCCESS);
+    }
 }
 
 internal void
@@ -618,63 +789,101 @@ renderer_vk_swapchain_find_extent(platform_handle_t window_handle)
     return extent;
 }
 
-internal renderer_vk_queue_indices_t
-renderer_vk_find_queue_indices()
+internal void
+renderer_vk_command_buffer_record(renderer_pipeline_t* pipeline, u32_t buffer_id, u32_t img_id)
 {
-    scratch_t scratch = arena_scratch_begin(g_renderer.arena);
+    VkCommandBufferBeginInfo begin_info = {0};
+    begin_info.sType                    = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin_info.flags                    = 0;
+    begin_info.pInheritanceInfo         = NULL;
 
-    u32_t family_count;
-    vkGetPhysicalDeviceQueueFamilyProperties(g_renderer.physical_device, &family_count, NULL);
+    VkCommandBuffer cmd = g_renderer.command_buffers[buffer_id];
 
-    VkQueueFamilyProperties* family_props = MEMORY_PUSH(scratch.arena, VkQueueFamilyProperties, family_count);
-    vkGetPhysicalDeviceQueueFamilyProperties(g_renderer.physical_device, &family_count, family_props);
+    VkResult cmd_result = vkBeginCommandBuffer(cmd, &begin_info);
+    EMBER_ASSERT(cmd_result == VK_SUCCESS);
 
-    b32_t graphics_found = EMBER_FALSE;
-    b32_t present_found  = EMBER_FALSE;
-    u32_t graphics_id    = 0;
-    u32_t present_id     = 0;
+    VkClearValue clear_value_color = {{ 0.03f, 0.07f, 0.10f, 1.0f }};
+    VkClearValue clear_value_depth = { 1.0f, 0.0f };
 
-    for (u32_t i = 0; i < family_count; i++)
-    {
-        VkBool32 present_support = VK_FALSE;
-        vkGetPhysicalDeviceSurfaceSupportKHR(g_renderer.physical_device, i, g_renderer.surface, &present_support);
+    VkRenderingAttachmentInfo color_attachment = {0};
+    color_attachment.sType                     = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    color_attachment.pNext                     = NULL;
+    color_attachment.imageView                 = g_renderer.swapchain_img_views[img_id];
+    color_attachment.imageLayout               = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    color_attachment.resolveMode               = VK_RESOLVE_MODE_NONE;
+    color_attachment.resolveImageView          = VK_NULL_HANDLE;
+    color_attachment.resolveImageLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
+    color_attachment.loadOp                    = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color_attachment.storeOp                   = VK_ATTACHMENT_STORE_OP_STORE;
+    color_attachment.clearValue                = clear_value_color;
 
-        b32_t graphics_support = family_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT;
+    VkRenderingAttachmentInfo depth_attachment = {0};
+    depth_attachment.sType                     = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depth_attachment.pNext                     = NULL;
+    depth_attachment.imageView                 = NULL;//g_renderer.swapchain_img_views[img_id];
+    depth_attachment.imageLayout               = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    depth_attachment.resolveMode               = VK_RESOLVE_MODE_NONE;
+    depth_attachment.resolveImageView          = VK_NULL_HANDLE;
+    depth_attachment.resolveImageLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
+    depth_attachment.loadOp                    = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment.storeOp                   = VK_ATTACHMENT_STORE_OP_STORE;
+    depth_attachment.clearValue                = clear_value_depth;
 
-        if (graphics_support && present_support)
-        {
-            graphics_found = EMBER_TRUE;
-            graphics_id    = i;
+    VkRenderingInfo rendering_info      = {0};
+    rendering_info.sType                = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    rendering_info.pNext                = NULL;
+    rendering_info.flags                = 0;
+    rendering_info.renderArea.offset.x  = 0;
+    rendering_info.renderArea.offset.y  = 0;
+    rendering_info.renderArea.extent    = g_renderer.swapchain_extent;
+    rendering_info.layerCount           = 1;
+    rendering_info.viewMask             = 0;
+    rendering_info.colorAttachmentCount = 1;
+    rendering_info.pColorAttachments    = &color_attachment;
+    rendering_info.pDepthAttachment     = NULL;
+    rendering_info.pStencilAttachment   = NULL;
 
-            present_found = EMBER_TRUE;
-            present_id    = i;
+    VkViewport viewport = {0};
+    viewport.x          = 0.0f;
+    viewport.y          = 0.0f;
+    viewport.width      = (f32_t)g_renderer.swapchain_extent.width;
+    viewport.height     = (f32_t)g_renderer.swapchain_extent.height;
+    viewport.minDepth   = 0.0f;
+    viewport.maxDepth   = 1.0f;
 
-            break;
-        }
+    VkRect2D scissor = {0};
+    scissor.offset.x = 0;
+    scissor.offset.y = 0;
+    scissor.extent   = g_renderer.swapchain_extent;
 
-        if (graphics_support && !graphics_found)
-        {
-            graphics_found = EMBER_TRUE;
-            graphics_id    = i;
-        }
 
-        if (present_support && !present_found)
-        {
-            present_found = EMBER_TRUE;
-            present_id    = i;
-        }
-    }
+    vkCmdBeginRendering(cmd, &rendering_info);
 
-    EMBER_ASSERT(graphics_found && present_found);
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->graphics_pipeline);
 
-    arena_scratch_end(scratch);
+    // vkCmdBindVertexBuffers();
+    // vkCmdBindIndexBuffers();
 
-    renderer_vk_queue_indices_t result = {
-        graphics_id,
-        present_id
-    };
+    //vkCmdBindDescriptorSets(
+    //    cmd,
+    //    VK_PIPELINE_BIND_POINT_GRAPHICS,
+    //    pipeline->graphics_pipeline_layout,
+    //    0,
+    //    1,
+    //    0, // VkDescriptorSet*
+    //    0,
+    //    NULL
+    //);
 
-    return result;
+    // vkCmdDrawIndexed()
+    vkCmdDraw(cmd, 3, 1, 0, 0);
+
+    vkCmdEndRendering(cmd);
+
+    cmd_result = vkEndCommandBuffer(cmd);
+    EMBER_ASSERT(cmd_result == VK_SUCCESS);
 }
 
 internal b32_t

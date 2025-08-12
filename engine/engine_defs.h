@@ -61,6 +61,7 @@ typedef double f64_t;
 
 #define global   static
 #define internal static
+#define persist  static
 
 #define ARENA_FREE_LIST 1
 
