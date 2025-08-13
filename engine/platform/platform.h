@@ -23,6 +23,18 @@ struct platform_window_size_t
     u32_t height;
 };
 
+typedef struct platform_window_state_t platform_window_state_t;
+struct platform_window_state_t
+{
+    b32_t is_resizing;
+};
+
+typedef struct platform_program_state_t platform_program_state_t;
+struct platform_program_state_t
+{
+    b32_t is_running;
+};
+
 typedef u32_t platform_file_flags_t;
 enum
 {
@@ -40,7 +52,9 @@ struct platform_file_props_t
     u64_t size;
 };
 
-global platform_info_t g_platform_info;
+global platform_info_t          g_platform_info;
+global platform_program_state_t g_program_state;
+global platform_window_state_t  g_window_state;
 
 internal void platform_info_init();
 internal void platform_abort(i32_t exit_code);
@@ -63,9 +77,10 @@ internal b32_t             platform_handle_equal(platform_handle_t handle_a, pla
 internal platform_handle_t platform_get_instance_handle();
 
 internal void                   platform_gfx_init();
-internal b32_t                  platform_gfx_process_events();
+internal void                   platform_gfx_process_events();
 internal platform_handle_t      platform_gfx_window_create(const char* title);
 internal platform_window_size_t platform_gfx_window_get_size(platform_handle_t window_handle);
 internal platform_window_size_t platform_gfx_window_client_get_size(platform_handle_t window_handle);
+internal b32_t                  platform_gfx_window_is_minimized(platform_handle_t window_handle);
 
 #endif // PLATFORM_H

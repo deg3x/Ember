@@ -259,20 +259,22 @@ platform_gfx_init()
     (void)atom;
 }
 
-internal b32_t
+internal void
 platform_gfx_process_events()
 {
     MSG msg = {0};
 
-    if (GetMessage(&msg, NULL, 0, 0) == 0)
+    while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
     {
-        return EMBER_FALSE;
+        if (msg.message == WM_QUIT)
+        {
+            g_program_state.is_running = EMBER_FALSE;
+            break;
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
-
-    TranslateMessage(&msg);
-    DispatchMessage(&msg);
-
-    return EMBER_TRUE;
 }
 
 internal platform_handle_t
@@ -310,16 +312,17 @@ platform_gfx_window_create(const char* window_name)
 internal platform_window_size_t
 platform_gfx_window_get_size(platform_handle_t window_handle)
 {
-    RECT window_rect;
-    
-    EMBER_ASSERT(IsWindow(window_handle.hnd));
+    platform_window_size_t result = {0};
 
-    GetWindowRect(window_handle.hnd, &window_rect);
+    if (IsWindow(window_handle.hnd))
+    {
+        RECT window_rect;
 
-    platform_window_size_t result = {
-        window_rect.right - window_rect.left,
-        window_rect.bottom - window_rect.top
-    };
+        GetWindowRect(window_handle.hnd, &window_rect);
+
+        result.width  = window_rect.right - window_rect.left;
+        result.height = window_rect.bottom - window_rect.top;
+    }
 
     return result;
 }
@@ -327,16 +330,30 @@ platform_gfx_window_get_size(platform_handle_t window_handle)
 internal platform_window_size_t
 platform_gfx_window_client_get_size(platform_handle_t window_handle)
 {
-    RECT client_rect;
-    
-    EMBER_ASSERT(IsWindow(window_handle.hnd));
+    platform_window_size_t result = {0};
 
-    GetClientRect(window_handle.hnd, &client_rect);
+    if (IsWindow(window_handle.hnd))
+    {
+        RECT client_rect;
 
-    platform_window_size_t result = {
-        client_rect.right - client_rect.left,
-        client_rect.bottom - client_rect.top
-    };
+        GetWindowRect(window_handle.hnd, &client_rect);
+
+        result.width  = client_rect.right - client_rect.left;
+        result.height = client_rect.bottom - client_rect.top;
+    }
+
+    return result;
+}
+
+internal b32_t
+platform_gfx_window_is_minimized(platform_handle_t window_handle)
+{
+    b32_t result = EMBER_FALSE;
+
+    if (IsWindow(window_handle.hnd))
+    {
+        result = !!(IsIconic(window_handle.hnd));
+    }
 
     return result;
 }
@@ -346,8 +363,14 @@ win32_window_message_callback(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_para
 {
     switch (msg)
     {
-        case WM_SIZE:
+        case WM_ENTERSIZEMOVE:
         {
+            g_window_state.is_resizing = EMBER_TRUE;
+            return 0;
+        }
+        case WM_EXITSIZEMOVE:
+        {
+            g_window_state.is_resizing = EMBER_FALSE;
             return 0;
         }
         case WM_ACTIVATEAPP:
@@ -359,14 +382,6 @@ win32_window_message_callback(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_para
             PostQuitMessage(0);
             return 0;
         }
-        case WM_PAINT:
-        {
-            PAINTSTRUCT paint = {0};
-            BeginPaint(hwnd, &paint);
-            renderer_tick();
-            EndPaint(hwnd, &paint);
-            return 0;
-        }
     }
 
     return DefWindowProc(hwnd, msg, w_param, l_param);
@@ -375,6 +390,8 @@ win32_window_message_callback(HWND hwnd, UINT msg, WPARAM w_param, LPARAM l_para
 int WINAPI 
 WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cmd)
 {
+    g_program_state.is_running = EMBER_TRUE;
+
     platform_gfx_init();
     platform_handle_t window_handle = platform_gfx_window_create("Ember Engine");
 
@@ -383,9 +400,16 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cm
 
     ShowWindow((HWND)window_handle.hnd, SW_SHOW);
 
-    while (platform_gfx_process_events())
+    for(;;)
     {
+        platform_gfx_process_events();
 
+        if (!g_program_state.is_running)
+        {
+            break;
+        }
+
+        renderer_tick(window_handle);
     }
 
     renderer_destroy();

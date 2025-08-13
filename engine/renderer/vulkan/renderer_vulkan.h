@@ -75,6 +75,7 @@ internal void           renderer_vk_pipeline_create_graphics_pipeline_layout(ren
 internal void           renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline);
 internal VkShaderModule renderer_vk_pipeline_create_shader_module(const u8_t* code, u64_t code_size);
 
+internal void               renderer_vk_swapchain_recreate(platform_handle_t window_handle);
 internal VkSurfaceFormatKHR renderer_vk_swapchain_find_format();
 internal VkPresentModeKHR   renderer_vk_swapchain_find_present();
 internal VkExtent2D         renderer_vk_swapchain_find_extent(platform_handle_t window_handle);

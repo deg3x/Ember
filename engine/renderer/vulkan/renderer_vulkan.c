@@ -21,7 +21,7 @@ renderer_init(platform_handle_t window_handle)
 }
 
 internal void
-renderer_tick()
+renderer_tick(platform_handle_t window_handle)
 {
     persist u32_t frame_id = 0;
 
@@ -33,12 +33,15 @@ renderer_tick()
         g_renderer.swapchain,
         UINT64_MAX,
         g_renderer.sem_img_avail[frame_id],
-        VK_NULL_HANDLE, &img_id
+        VK_NULL_HANDLE,
+        &img_id
     );
 
     if (vk_result == VK_ERROR_OUT_OF_DATE_KHR)
     {
-        // TODO(KB): Recreate swapchain
+        renderer_vk_swapchain_recreate(window_handle);
+
+        return;
     }
     else
     {
@@ -93,9 +96,9 @@ renderer_tick()
     vk_result = vkQueuePresentKHR(g_renderer.present_queue, &present_info);
 
     // TODO(KB): Check for window resized
-    if (vk_result == VK_ERROR_OUT_OF_DATE_KHR || vk_result == VK_SUBOPTIMAL_KHR)
+    if (vk_result == VK_ERROR_OUT_OF_DATE_KHR || vk_result == VK_SUBOPTIMAL_KHR || g_window_state.is_resizing)
     {
-        // TODO(KB): Recreate swapchain
+        renderer_vk_swapchain_recreate(window_handle);
     }
     else
     {
@@ -706,6 +709,25 @@ renderer_vk_pipeline_create_shader_module(const u8_t* code, u64_t code_size)
     return result;
 }
 
+internal void
+renderer_vk_swapchain_recreate(platform_handle_t window_handle)
+{
+    while(platform_gfx_window_is_minimized(window_handle))
+    {
+        platform_gfx_process_events();
+    }
+
+    vkDeviceWaitIdle(g_renderer.device);
+
+    for (u32_t i = 0; i < RENDERER_VK_SWAP_IMG_COUNT; i++)
+    {
+        vkDestroyImageView(g_renderer.device, g_renderer.swapchain_img_views[i], NULL);
+    }
+    vkDestroySwapchainKHR(g_renderer.device, g_renderer.swapchain, NULL);
+
+    renderer_vk_create_swapchain(window_handle);
+}
+
 internal VkSurfaceFormatKHR
 renderer_vk_swapchain_find_format()
 {
@@ -861,6 +883,30 @@ renderer_vk_command_buffer_record(renderer_pipeline_t* pipeline, u32_t buffer_id
     scissor.offset.y = 0;
     scissor.extent   = g_renderer.swapchain_extent;
 
+    VkImageMemoryBarrier2 img_barrier           = {0};
+    img_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    img_barrier.srcStageMask                    = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    img_barrier.srcAccessMask                   = 0;
+    img_barrier.dstStageMask                    = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    img_barrier.dstAccessMask                   = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    img_barrier.oldLayout                       = VK_IMAGE_LAYOUT_UNDEFINED;
+    img_barrier.newLayout                       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    img_barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    img_barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    img_barrier.image                           = g_renderer.swapchain_images[img_id];
+    img_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    img_barrier.subresourceRange.baseMipLevel   = 0;
+    img_barrier.subresourceRange.levelCount     = 1;
+    img_barrier.subresourceRange.baseArrayLayer = 0;
+    img_barrier.subresourceRange.layerCount     = 1;
+
+    VkDependencyInfo dep_info        = {0};
+    dep_info.sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.dependencyFlags         = 0;
+    dep_info.imageMemoryBarrierCount = 1;
+    dep_info.pImageMemoryBarriers    = &img_barrier;
+
+    vkCmdPipelineBarrier2(cmd, &dep_info);
 
     vkCmdBeginRendering(cmd, &rendering_info);
 
@@ -886,6 +932,31 @@ renderer_vk_command_buffer_record(renderer_pipeline_t* pipeline, u32_t buffer_id
     vkCmdDraw(cmd, 3, 1, 0, 0);
 
     vkCmdEndRendering(cmd);
+
+    VkImageMemoryBarrier2 img_barrier_end           = {0};
+    img_barrier_end.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    img_barrier_end.srcStageMask                    = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    img_barrier_end.srcAccessMask                   = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    img_barrier_end.dstStageMask                    = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    img_barrier_end.dstAccessMask                   = 0;
+    img_barrier_end.oldLayout                       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    img_barrier_end.newLayout                       = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    img_barrier_end.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    img_barrier_end.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    img_barrier_end.image                           = g_renderer.swapchain_images[img_id];
+    img_barrier_end.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    img_barrier_end.subresourceRange.baseMipLevel   = 0;
+    img_barrier_end.subresourceRange.levelCount     = 1;
+    img_barrier_end.subresourceRange.baseArrayLayer = 0;
+    img_barrier_end.subresourceRange.layerCount     = 1;
+
+    VkDependencyInfo dep_info_end        = {0};
+    dep_info_end.sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info_end.dependencyFlags         = 0;
+    dep_info_end.imageMemoryBarrierCount = 1;
+    dep_info_end.pImageMemoryBarriers    = &img_barrier_end;
+
+    vkCmdPipelineBarrier2(cmd, &dep_info_end);
 
     cmd_result = vkEndCommandBuffer(cmd);
     EMBER_ASSERT(cmd_result == VK_SUCCESS);

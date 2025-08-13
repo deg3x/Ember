@@ -5,7 +5,7 @@ typedef struct win32_window_t win32_window_t;
 struct win32_window_t
 {
     HWND handle;
-    HDC device_ctx;
+    HDC  device_ctx;
 };
 
 typedef struct win32_gfx_state_t win32_gfx_state_t;
