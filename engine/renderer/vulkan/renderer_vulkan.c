@@ -18,6 +18,10 @@ renderer_init(platform_handle_t window_handle)
     vkGetPhysicalDeviceMemoryProperties(g_renderer.physical_device, &g_renderer.device_mem_props);
 
     vertex_t vertices[] = {
+        {{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.8f, 0.8f, 0.8f}, {0.0f, 0.0f}},
+        {{-0.5f, 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.8f}, {0.0f, 1.0f}},
+        {{ 0.5f, 0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.8f, 0.0f}, {1.0f, 1.0f}},
+        {{ 0.5f, 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.8f, 0.0f, 0.0f}, {1.0f, 0.0f}},
         {{-0.5f, 0.0f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.8f, 0.8f, 0.8f}, {0.0f, 0.0f}},
         {{-0.5f, 0.0f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.8f}, {0.0f, 1.0f}},
         {{ 0.5f, 0.0f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.8f, 0.0f}, {1.0f, 1.0f}},
@@ -26,10 +30,13 @@ renderer_init(platform_handle_t window_handle)
 
     u32_t indices[] = {
         0, 3, 1,
-        1, 3, 2
+        1, 3, 2,
+        4, 7, 5,
+        5, 7, 6
     };
 
-    renderer_vk_create_mesh_data(vertices, 4, indices, 6);
+    renderer_vk_create_mesh_data(vertices, ARRAY_COUNT(vertices), indices, ARRAY_COUNT(indices));
+    renderer_vk_create_depth_resources();
 
     g_renderer.pipelines      = MEMORY_PUSH_ZERO(g_renderer.arena, renderer_pipeline_t, 1);
     g_renderer.pipeline_count = 1;
@@ -165,6 +172,10 @@ renderer_destroy()
         vkDestroyBuffer(g_renderer.device, g_renderer.mesh_data.ubo_buffer[i], NULL);
         vkFreeMemory(g_renderer.device, g_renderer.mesh_data.ubo_memory[i], NULL);
     }
+
+    vkDestroyImageView(g_renderer.device, g_renderer.mesh_data.depth_image_view, NULL);
+    vkDestroyImage(g_renderer.device, g_renderer.mesh_data.depth_image, NULL);
+    vkFreeMemory(g_renderer.device, g_renderer.mesh_data.depth_memory, NULL);
 
     vkDestroyBuffer(g_renderer.device, g_renderer.mesh_data.vertex_buffer, NULL);
     vkDestroyBuffer(g_renderer.device, g_renderer.mesh_data.index_buffer, NULL);
@@ -471,27 +482,16 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
     g_renderer.swapchain_images    = MEMORY_PUSH(g_renderer.arena, VkImage, img_count);
     g_renderer.swapchain_img_views = MEMORY_PUSH(g_renderer.arena, VkImageView, img_count);
 
-    VkImageViewCreateInfo view_info           = {0};
-    view_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    view_info.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
-    view_info.format                          = g_renderer.swapchain_img_fmt;
-    view_info.components.r                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-    view_info.components.g                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-    view_info.components.b                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-    view_info.components.a                    = VK_COMPONENT_SWIZZLE_IDENTITY;
-    view_info.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-    view_info.subresourceRange.baseArrayLayer = 0;
-    view_info.subresourceRange.baseMipLevel   = 0;
-    view_info.subresourceRange.levelCount     = 1;
-    view_info.subresourceRange.layerCount     = 1;
-
     vkGetSwapchainImagesKHR(g_renderer.device, g_renderer.swapchain, &img_count, g_renderer.swapchain_images);
+
     for (u32_t i = 0; i < img_count; i++)
     {
-        view_info.image = g_renderer.swapchain_images[i];
-
-        create_result = vkCreateImageView(g_renderer.device, &view_info, NULL, &g_renderer.swapchain_img_views[i]);
-        EMBER_ASSERT(create_result == VK_SUCCESS);
+        renderer_vk_create_image_view(
+            g_renderer.swapchain_images[i],
+            &g_renderer.swapchain_img_views[i],
+            g_renderer.swapchain_img_fmt,
+            VK_IMAGE_ASPECT_COLOR_BIT
+        );
     }
 }
 
@@ -650,6 +650,111 @@ renderer_vk_create_mesh_data(vertex_t* vertices, u32_t vertex_count, u32_t* indi
 }
 
 internal void
+renderer_vk_create_depth_resources()
+{
+    VkFormat formats[] = {
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT
+    };
+
+    VkFormat depth_format = VK_FORMAT_UNDEFINED;
+
+    for (u32_t i = 0; i < ARRAY_COUNT(formats); i++)
+    {
+        VkFormatProperties format_props;
+        vkGetPhysicalDeviceFormatProperties(g_renderer.physical_device, formats[i], &format_props);
+
+        if (format_props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+        {
+            depth_format = formats[i];
+            break;
+        }
+    }
+
+    EMBER_ASSERT(depth_format != VK_FORMAT_UNDEFINED);
+
+    renderer_vk_create_image(
+        &g_renderer.mesh_data.depth_image,
+        g_renderer.swapchain_extent.width,
+        g_renderer.swapchain_extent.height,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_IMAGE_TILING_OPTIMAL,
+        depth_format
+    );
+
+    renderer_vk_create_image_memory(
+        g_renderer.mesh_data.depth_image,
+        &g_renderer.mesh_data.depth_memory,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    renderer_vk_create_image_view(
+        g_renderer.mesh_data.depth_image,
+        &g_renderer.mesh_data.depth_image_view,
+        depth_format,
+        VK_IMAGE_ASPECT_DEPTH_BIT
+    );
+
+    VkCommandBufferAllocateInfo alloc_info = {0};
+    alloc_info.sType                       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    alloc_info.level                       = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    alloc_info.commandPool                 = g_renderer.command_pool;
+    alloc_info.commandBufferCount          = 1;
+
+    VkCommandBuffer cmd_buffer;
+    VkResult vk_result = vkAllocateCommandBuffers(g_renderer.device, &alloc_info, &cmd_buffer);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
+
+    VkCommandBufferBeginInfo begin_info = {0};
+    begin_info.sType                    = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin_info.flags                    = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(cmd_buffer, &begin_info);
+
+    VkImageMemoryBarrier2 image_barrier           = {0};
+    image_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    image_barrier.srcStageMask                    = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    image_barrier.srcAccessMask                   = 0;
+    image_barrier.dstStageMask                    = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+    image_barrier.dstAccessMask                   = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    image_barrier.oldLayout                       = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_barrier.newLayout                       = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    image_barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    image_barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    image_barrier.image                           = g_renderer.mesh_data.depth_image;
+    image_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
+    image_barrier.subresourceRange.baseArrayLayer = 0;
+    image_barrier.subresourceRange.layerCount     = 1;
+    image_barrier.subresourceRange.baseMipLevel   = 0;
+    image_barrier.subresourceRange.levelCount     = 1;
+
+    VkDependencyInfo dependency_info        = {0};
+    dependency_info.sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependency_info.dependencyFlags         = 0;
+    dependency_info.imageMemoryBarrierCount = 1;
+    dependency_info.pImageMemoryBarriers    = &image_barrier;
+
+    vkCmdPipelineBarrier2(cmd_buffer, &dependency_info);
+
+    vkEndCommandBuffer(cmd_buffer);
+
+    VkCommandBufferSubmitInfo cmd_buffer_info = {0};
+    cmd_buffer_info.sType                     = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    cmd_buffer_info.commandBuffer             = cmd_buffer;
+
+    VkSubmitInfo2 submit_info          = {0};
+    submit_info.sType                  = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos    = &cmd_buffer_info;
+
+    vkQueueSubmit2(g_renderer.graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vkQueueWaitIdle(g_renderer.graphics_queue);
+
+    vkFreeCommandBuffers(g_renderer.device, g_renderer.command_pool, 1, &cmd_buffer);
+}
+
+internal void
 renderer_vk_create_buffer(VkBuffer* buffer, VkDeviceSize size, VkBufferUsageFlags usage)
 {
     VkBufferCreateInfo buffer_info = {0};
@@ -692,6 +797,85 @@ renderer_vk_create_buffer_memory(VkBuffer buffer, VkDeviceMemory* memory, VkMemo
     EMBER_ASSERT(vk_result == VK_SUCCESS);
 
     vkBindBufferMemory(g_renderer.device, buffer, *memory, 0);
+}
+
+internal void
+renderer_vk_create_image(VkImage* image, u32_t width, u32_t height, VkImageUsageFlags usage, VkImageTiling tiling, VkFormat format)
+{
+    VkImageCreateInfo image_info     = {0};
+    image_info.sType                 = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image_info.flags                 = 0;
+    image_info.imageType             = VK_IMAGE_TYPE_2D;
+    image_info.format                = format;
+    image_info.extent.width          = width;
+    image_info.extent.height         = height;
+    image_info.extent.depth          = 1;
+    image_info.mipLevels             = 1;
+    image_info.arrayLayers           = 1;
+    image_info.samples               = VK_SAMPLE_COUNT_1_BIT;
+    image_info.tiling                = tiling;
+    image_info.usage                 = usage;
+    image_info.sharingMode           = VK_SHARING_MODE_EXCLUSIVE;
+    image_info.queueFamilyIndexCount = 0;
+    image_info.pQueueFamilyIndices   = NULL;
+    image_info.initialLayout         = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VkResult vk_result = vkCreateImage(g_renderer.device, &image_info, NULL, image);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
+}
+
+internal void
+renderer_vk_create_image_view(VkImage image, VkImageView* view, VkFormat format, VkImageAspectFlags aspect_flags)
+{
+    VkImageViewCreateInfo view_info           = {0};
+    view_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view_info.flags                           = 0;
+    view_info.image                           = image;
+    view_info.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+    view_info.format                          = format;
+    view_info.components.r                    = VK_COMPONENT_SWIZZLE_IDENTITY;
+    view_info.components.g                    = VK_COMPONENT_SWIZZLE_IDENTITY;
+    view_info.components.b                    = VK_COMPONENT_SWIZZLE_IDENTITY;
+    view_info.components.a                    = VK_COMPONENT_SWIZZLE_IDENTITY;
+    view_info.subresourceRange.aspectMask     = aspect_flags;
+    view_info.subresourceRange.baseArrayLayer = 0;
+    view_info.subresourceRange.layerCount     = 1;
+    view_info.subresourceRange.baseMipLevel   = 0;
+    view_info.subresourceRange.levelCount     = 1;
+
+    VkResult vk_result = vkCreateImageView(g_renderer.device, &view_info, NULL, view);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
+}
+
+internal void
+renderer_vk_create_image_memory(VkImage image, VkDeviceMemory* memory, VkMemoryPropertyFlags mem_flags)
+{
+    VkMemoryRequirements mem_req;
+    vkGetImageMemoryRequirements(g_renderer.device, image, &mem_req);
+
+    u32_t memory_index = U32_MAX;
+    for (u32_t i = 0; i < g_renderer.device_mem_props.memoryTypeCount; i++)
+    {
+        b32_t type_check = mem_req.memoryTypeBits & (1 << i);
+        b32_t flag_check = (g_renderer.device_mem_props.memoryTypes[i].propertyFlags & mem_flags) == mem_flags;
+        if (type_check && flag_check)
+        {
+            memory_index = i;
+            break;
+        }
+    }
+
+    EMBER_ASSERT(memory_index != U32_MAX);
+
+    VkMemoryAllocateInfo alloc_info = {0};
+    alloc_info.sType                = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.allocationSize       = mem_req.size;
+    alloc_info.memoryTypeIndex      = memory_index;
+
+    VkResult vk_result = vkAllocateMemory(g_renderer.device, &alloc_info, NULL, memory);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
+
+    vkBindImageMemory(g_renderer.device, image, *memory, 0);
 }
 
 internal void
@@ -918,11 +1102,11 @@ renderer_vk_pipeline_create_graphics_pipeline(renderer_pipeline_t* pipeline)
     depth_stencil_info.depthWriteEnable                      = VK_TRUE;
     depth_stencil_info.depthCompareOp                        = VK_COMPARE_OP_LESS;
     depth_stencil_info.depthBoundsTestEnable                 = VK_FALSE;
-    depth_stencil_info.minDepthBounds                        = 0.0f;
-    depth_stencil_info.maxDepthBounds                        = 1.0f;
     depth_stencil_info.stencilTestEnable                     = VK_FALSE;
     depth_stencil_info.front                                 = stencil_state_front;
     depth_stencil_info.back                                  = stencil_state_back;
+    depth_stencil_info.minDepthBounds                        = 0.0f;
+    depth_stencil_info.maxDepthBounds                        = 1.0f;
 
     VkPipelineColorBlendAttachmentState color_blend_attachment = {0};
     color_blend_attachment.blendEnable                         = VK_FALSE;
@@ -1016,7 +1200,12 @@ renderer_vk_swapchain_recreate(platform_handle_t window_handle)
     }
     vkDestroySwapchainKHR(g_renderer.device, g_renderer.swapchain, NULL);
 
+    vkDestroyImageView(g_renderer.device, g_renderer.mesh_data.depth_image_view, NULL);
+    vkDestroyImage(g_renderer.device, g_renderer.mesh_data.depth_image, NULL);
+    vkFreeMemory(g_renderer.device, g_renderer.mesh_data.depth_memory, NULL);
+
     renderer_vk_create_swapchain(window_handle);
+    renderer_vk_create_depth_resources();
 }
 
 internal VkSurfaceFormatKHR
@@ -1138,7 +1327,7 @@ renderer_vk_command_buffer_record(renderer_pipeline_t* pipeline, u32_t buffer_id
     VkRenderingAttachmentInfo depth_attachment = {0};
     depth_attachment.sType                     = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     depth_attachment.pNext                     = NULL;
-    depth_attachment.imageView                 = NULL;//g_renderer.swapchain_img_views[img_id];
+    depth_attachment.imageView                 = g_renderer.mesh_data.depth_image_view;
     depth_attachment.imageLayout               = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     depth_attachment.resolveMode               = VK_RESOLVE_MODE_NONE;
     depth_attachment.resolveImageView          = VK_NULL_HANDLE;
@@ -1158,7 +1347,7 @@ renderer_vk_command_buffer_record(renderer_pipeline_t* pipeline, u32_t buffer_id
     rendering_info.viewMask             = 0;
     rendering_info.colorAttachmentCount = 1;
     rendering_info.pColorAttachments    = &color_attachment;
-    rendering_info.pDepthAttachment     = NULL;
+    rendering_info.pDepthAttachment     = &depth_attachment;
     rendering_info.pStencilAttachment   = NULL;
 
     VkViewport viewport = {0};

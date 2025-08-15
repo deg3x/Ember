@@ -22,9 +22,14 @@ struct renderer_mesh_data_t
     VkBuffer       vertex_buffer;
     VkBuffer       index_buffer;
     VkBuffer       ubo_buffer[RENDERER_FRAMES_IN_FLIGHT];
+
+    VkImage        depth_image;
+    VkImageView    depth_image_view;
+
     VkDeviceMemory vertex_memory;
     VkDeviceMemory index_memory;
     VkDeviceMemory ubo_memory[RENDERER_FRAMES_IN_FLIGHT];
+    VkDeviceMemory depth_memory;
 
     void*          ubo_mapped[RENDERER_FRAMES_IN_FLIGHT];
     u32_t          indices_count;
@@ -96,8 +101,12 @@ internal void renderer_vk_create_descriptor_pool();
 internal void renderer_vk_create_sync_primitives();
 
 internal void renderer_vk_create_mesh_data(vertex_t* vertices, u32_t vertex_count, u32_t* indices, u32_t indices_count);
+internal void renderer_vk_create_depth_resources();
 internal void renderer_vk_create_buffer(VkBuffer* buffer, VkDeviceSize size, VkBufferUsageFlags usage);
 internal void renderer_vk_create_buffer_memory(VkBuffer buffer, VkDeviceMemory* memory, VkMemoryPropertyFlags mem_flags);
+internal void renderer_vk_create_image(VkImage* image, u32_t width, u32_t height, VkImageUsageFlags usage, VkImageTiling tiling, VkFormat format);
+internal void renderer_vk_create_image_view(VkImage image, VkImageView* view, VkFormat format, VkImageAspectFlags aspect_flags);
+internal void renderer_vk_create_image_memory(VkImage image, VkDeviceMemory* memory, VkMemoryPropertyFlags mem_flags);
 internal void renderer_vk_copy_buffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
 
 internal void           renderer_vk_pipeline_create_descriptor_set_layout(renderer_pipeline_t* pipeline);
