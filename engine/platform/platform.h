@@ -35,6 +35,16 @@ struct platform_program_state_t
     b32_t is_running;
 };
 
+typedef struct platform_timer_t platform_timer_t;
+struct platform_timer_t
+{
+    u64_t frequency;
+    f64_t inv_freq;
+    u64_t start;
+    u64_t last;
+    u64_t now;
+};
+
 typedef u32_t platform_file_flags_t;
 enum
 {
@@ -53,11 +63,17 @@ struct platform_file_props_t
 };
 
 global platform_info_t          g_platform_info;
+global platform_timer_t         g_timer;
 global platform_program_state_t g_program_state;
 global platform_window_state_t  g_window_state;
 
 internal void platform_info_init();
 internal void platform_abort(i32_t exit_code);
+
+internal void  platform_timer_init();
+internal void  platform_timer_update();
+internal f64_t platform_timer_since_start();
+internal f64_t platform_timer_delta();
 
 internal void* platform_mem_reserve(u64_t size);
 internal void* platform_mem_reserve_large(u64_t size);

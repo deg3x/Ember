@@ -30,7 +30,7 @@ struct vertex_t
 };
 
 internal void renderer_init(platform_handle_t window_handle);
-internal void renderer_tick(platform_handle_t window_handle);
+internal void renderer_update(platform_handle_t window_handle);
 internal void renderer_destroy();
 
 internal void renderer_pipeline_init(renderer_pipeline_t* state);

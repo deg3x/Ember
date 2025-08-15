@@ -38,7 +38,7 @@ renderer_init(platform_handle_t window_handle)
 }
 
 internal void
-renderer_tick(platform_handle_t window_handle)
+renderer_update(platform_handle_t window_handle)
 {
     persist u32_t frame_id = 0;
 
@@ -72,9 +72,11 @@ renderer_tick(platform_handle_t window_handle)
 
     renderer_vk_ubo_t ubo;
 
+    quat_t rotation = quat_from_axis_angle(&(vec3_t){0.0f, 1.0f, 0.0f}, (f32_t)platform_timer_since_start());
+
     ubo.model = mat4_model(
         &(vec3_t){0.0f, 0.0f, 0.0f},
-        &(quat_t){0.0f, 0.0f, 0.0f, 1.0f},
+        &rotation,
         &(vec3_t){1.0f, 1.0f, 1.0f}
     );
 

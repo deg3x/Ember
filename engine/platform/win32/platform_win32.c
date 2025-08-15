@@ -16,6 +16,42 @@ platform_abort(i32_t exit_code)
     ExitProcess(exit_code);
 }
 
+internal void
+platform_timer_init()
+{
+    QueryPerformanceFrequency((LARGE_INTEGER *)&g_timer.frequency);
+    QueryPerformanceCounter((LARGE_INTEGER *)&g_timer.start);
+
+    g_timer.last     = g_timer.start;
+    g_timer.inv_freq = 1.0 / (f64_t)g_timer.frequency;
+}
+
+internal void
+platform_timer_update()
+{
+    g_timer.last = g_timer.now;
+
+    QueryPerformanceCounter((LARGE_INTEGER *)&g_timer.now);
+}
+
+internal f64_t
+platform_timer_since_start()
+{
+    u64_t time_diff = g_timer.now - g_timer.start;
+    f64_t time      = (f64_t)time_diff * g_timer.inv_freq;
+
+    return time;
+}
+
+internal f64_t
+platform_timer_delta()
+{
+    u64_t time_diff  = g_timer.now - g_timer.last;
+    f64_t delta_time = (f64_t)time_diff * g_timer.inv_freq;
+
+    return delta_time;
+}
+
 internal void*
 platform_mem_reserve(u64_t size)
 {
@@ -392,10 +428,12 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cm
 {
     g_program_state.is_running = EMBER_TRUE;
 
+    platform_info_init();
+    platform_timer_init();
     platform_gfx_init();
+
     platform_handle_t window_handle = platform_gfx_window_create("Ember Engine");
 
-    platform_info_init();
     renderer_init(window_handle);
 
     ShowWindow((HWND)window_handle.hnd, SW_SHOW);
@@ -403,13 +441,16 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int show_cm
     for(;;)
     {
         platform_gfx_process_events();
+        platform_timer_update();
+
+        // f32_t delta_time = (f32_t)platform_timer_delta();
 
         if (!g_program_state.is_running)
         {
             break;
         }
 
-        renderer_tick(window_handle);
+        renderer_update(window_handle);
     }
 
     renderer_destroy();
