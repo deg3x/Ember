@@ -12,7 +12,24 @@ renderer_init(platform_handle_t window_handle)
     renderer_vk_create_swapchain(window_handle);
     renderer_vk_create_command_pool();
     renderer_vk_create_command_buffers();
+    renderer_vk_create_descriptor_pool();
     renderer_vk_create_sync_primitives();
+
+    vkGetPhysicalDeviceMemoryProperties(g_renderer.physical_device, &g_renderer.device_mem_props);
+
+    vertex_t vertices[] = {
+        {{-0.5f, 0.0f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.8f, 0.8f, 0.8f}, {0.0f, 0.0f}},
+        {{-0.5f, 0.0f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.8f}, {0.0f, 1.0f}},
+        {{ 0.5f, 0.0f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.8f, 0.0f}, {1.0f, 1.0f}},
+        {{ 0.5f, 0.0f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.8f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    };
+
+    u32_t indices[] = {
+        0, 3, 1,
+        1, 3, 2
+    };
+
+    renderer_vk_create_mesh_data(vertices, 4, indices, 6);
 
     g_renderer.pipelines      = MEMORY_PUSH_ZERO(g_renderer.arena, renderer_pipeline_t, 1);
     g_renderer.pipeline_count = 1;
@@ -52,6 +69,27 @@ renderer_tick(platform_handle_t window_handle)
     vkResetCommandBuffer(g_renderer.command_buffers[frame_id], 0);
 
     renderer_vk_command_buffer_record(&g_renderer.pipelines[0], frame_id, img_id);
+
+    renderer_vk_ubo_t ubo;
+
+    ubo.model = mat4_model(
+        &(vec3_t){0.0f, 0.0f, 0.0f},
+        &(quat_t){0.0f, 0.0f, 0.0f, 1.0f},
+        &(vec3_t){1.0f, 1.0f, 1.0f}
+    );
+
+    ubo.view = mat4_look_at(
+        &(vec3_t){0.0f, 2.0f, -2.0f},
+        &(vec3_t){0.0f, 0.0f,  0.0f},
+        &(vec3_t){0.0f, 1.0f,  0.0f}
+    );
+
+    platform_window_size_t client_size = platform_gfx_window_client_get_size(window_handle);
+    f32_t aspect = (f32_t)client_size.width / (f32_t)client_size.height;
+
+    ubo.proj = mat4_perspective(30.0f, aspect, 0.01f, 100.0f);
+
+    memcpy(g_renderer.mesh_data.ubo_mapped[frame_id], &ubo, sizeof(ubo));
 
     VkSemaphoreSubmitInfo wait_sem_info = {0};
     wait_sem_info.sType                 = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -95,7 +133,6 @@ renderer_tick(platform_handle_t window_handle)
 
     vk_result = vkQueuePresentKHR(g_renderer.present_queue, &present_info);
 
-    // TODO(KB): Check for window resized
     if (vk_result == VK_ERROR_OUT_OF_DATE_KHR || vk_result == VK_SUBOPTIMAL_KHR || g_window_state.is_resizing)
     {
         renderer_vk_swapchain_recreate(window_handle);
@@ -105,7 +142,7 @@ renderer_tick(platform_handle_t window_handle)
         EMBER_ASSERT(vk_result == VK_SUCCESS);
     }
 
-    frame_id = (frame_id + 1) % RENDERER_VK_FRAMES_IN_FLIGHT;
+    frame_id = (frame_id + 1) % RENDERER_FRAMES_IN_FLIGHT;
 }
 
 internal void
@@ -113,21 +150,35 @@ renderer_destroy()
 {
     vkDeviceWaitIdle(g_renderer.device);
 
-    for (u32_t i = 0; i < RENDERER_VK_FRAMES_IN_FLIGHT; i++)
+    for (u32_t i = 0; i < RENDERER_FRAMES_IN_FLIGHT; i++)
     {
         vkDestroySemaphore(g_renderer.device, g_renderer.sem_img_avail[i], NULL);
         vkDestroySemaphore(g_renderer.device, g_renderer.sem_render_end[i], NULL);
         vkDestroyFence(g_renderer.device, g_renderer.fence_in_flight[i], NULL);
     }
 
-    vkDestroyCommandPool(g_renderer.device, g_renderer.command_pool, NULL);
+    for (u32_t i = 0; i < RENDERER_FRAMES_IN_FLIGHT; i++)
+    {
+        vkUnmapMemory(g_renderer.device, g_renderer.mesh_data.ubo_memory[i]);
+        vkDestroyBuffer(g_renderer.device, g_renderer.mesh_data.ubo_buffer[i], NULL);
+        vkFreeMemory(g_renderer.device, g_renderer.mesh_data.ubo_memory[i], NULL);
+    }
+
+    vkDestroyBuffer(g_renderer.device, g_renderer.mesh_data.vertex_buffer, NULL);
+    vkDestroyBuffer(g_renderer.device, g_renderer.mesh_data.index_buffer, NULL);
+
+    vkFreeMemory(g_renderer.device, g_renderer.mesh_data.vertex_memory, NULL);
+    vkFreeMemory(g_renderer.device, g_renderer.mesh_data.index_memory, NULL);
 
     for (int i = 0; i < g_renderer.pipeline_count; i++)
     {
         renderer_pipeline_destroy(g_renderer.pipelines + i);
     }
 
-    for (u32_t i = 0; i < RENDERER_VK_SWAP_IMG_COUNT; i++)
+    vkDestroyDescriptorPool(g_renderer.device, g_renderer.descriptor_pool, NULL);
+    vkDestroyCommandPool(g_renderer.device, g_renderer.command_pool, NULL);
+
+    for (u32_t i = 0; i < RENDERER_SWAP_IMG_COUNT; i++)
     {
         vkDestroyImageView(g_renderer.device, g_renderer.swapchain_img_views[i], NULL);
     }
@@ -143,6 +194,7 @@ internal void
 renderer_pipeline_init(renderer_pipeline_t* pipeline)
 {
     renderer_vk_pipeline_create_descriptor_set_layout(pipeline);
+    renderer_vk_pipeline_create_descriptor_sets(pipeline);
     renderer_vk_pipeline_create_graphics_pipeline_layout(pipeline);
     renderer_vk_pipeline_create_graphics_pipeline(pipeline);
 }
@@ -152,6 +204,14 @@ renderer_pipeline_destroy(renderer_pipeline_t* pipeline)
 {
     vkDestroyPipeline(g_renderer.device, pipeline->graphics_pipeline, NULL);
     vkDestroyPipelineLayout(g_renderer.device, pipeline->graphics_pipeline_layout, NULL);
+
+    // NOTE(KB): No need to free descriptor sets individually
+    //           If we want to do this we need to create the pool with VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
+    //
+    //for (u32_t i = 0; i < RENDERER_FRAMES_IN_FLIGHT; i++)
+    //{
+    //    vkFreeDescriptorSets(g_renderer.device, g_renderer.descriptor_pool, RENDERER_FRAMES_IN_FLIGHT, pipeline->descriptor_sets);
+    //}
     vkDestroyDescriptorSetLayout(g_renderer.device, pipeline->descriptor_set_layout, NULL);
 }
 
@@ -368,7 +428,7 @@ renderer_vk_create_swapchain(platform_handle_t window_handle)
     VkSurfaceCapabilitiesKHR capabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_renderer.physical_device, g_renderer.surface, &capabilities);
 
-    u32_t img_count = RENDERER_VK_SWAP_IMG_COUNT;
+    u32_t img_count = RENDERER_SWAP_IMG_COUNT;
 
     EMBER_ASSERT(img_count >= capabilities.minImageCount);
     EMBER_ASSERT(img_count <= capabilities.maxImageCount || capabilities.maxImageCount == 0);
@@ -452,10 +512,27 @@ renderer_vk_create_command_buffers()
     alloc_info.sType                       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     alloc_info.commandPool                 = g_renderer.command_pool;
     alloc_info.level                       = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    alloc_info.commandBufferCount          = RENDERER_VK_FRAMES_IN_FLIGHT;
+    alloc_info.commandBufferCount          = RENDERER_FRAMES_IN_FLIGHT;
 
     VkResult alloc_result = vkAllocateCommandBuffers(g_renderer.device, &alloc_info, (VkCommandBuffer *)&g_renderer.command_buffers);
     EMBER_ASSERT(alloc_result == VK_SUCCESS);
+}
+
+internal void
+renderer_vk_create_descriptor_pool()
+{
+    VkDescriptorPoolSize pool_sizes[1] = {0};
+    pool_sizes[0].type                 = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pool_sizes[0].descriptorCount      = RENDERER_FRAMES_IN_FLIGHT;
+
+    VkDescriptorPoolCreateInfo pool_info = {0};
+    pool_info.sType                      = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.poolSizeCount              = ARRAY_COUNT(pool_sizes);
+    pool_info.pPoolSizes                 = pool_sizes;
+    pool_info.maxSets                    = RENDERER_FRAMES_IN_FLIGHT;
+
+    VkResult vk_result = vkCreateDescriptorPool(g_renderer.device, &pool_info, NULL, &g_renderer.descriptor_pool);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
 }
 
 internal void
@@ -468,7 +545,7 @@ renderer_vk_create_sync_primitives()
     fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    for (u32_t i = 0; i < RENDERER_VK_FRAMES_IN_FLIGHT; i++)
+    for (u32_t i = 0; i < RENDERER_FRAMES_IN_FLIGHT; i++)
     {
         VkResult create_result;
 
@@ -481,6 +558,179 @@ renderer_vk_create_sync_primitives()
         create_result = vkCreateFence(g_renderer.device, &fence_info, NULL, &g_renderer.fence_in_flight[i]);
         EMBER_ASSERT(create_result == VK_SUCCESS);
     }
+}
+
+internal void
+renderer_vk_create_mesh_data(vertex_t* vertices, u32_t vertex_count, u32_t* indices, u32_t indices_count)
+{
+    VkDeviceSize vert_size = vertex_count * sizeof(vertex_t);
+    VkDeviceSize idx_size  = indices_count * sizeof(indices[0]);
+    VkDeviceSize max_size  = MAX(vert_size, idx_size);
+    VkDeviceSize ubo_size  = sizeof(renderer_vk_ubo_t);
+
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_memory;
+
+    renderer_vk_create_buffer(
+        &staging_buffer,
+        max_size,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+    );
+
+    renderer_vk_create_buffer(
+        &g_renderer.mesh_data.vertex_buffer,
+        vert_size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+    );
+
+    renderer_vk_create_buffer(
+        &g_renderer.mesh_data.index_buffer,
+        idx_size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+    );
+
+    for (u32_t i = 0; i < RENDERER_FRAMES_IN_FLIGHT; i++)
+    {
+        renderer_vk_create_buffer(
+            &g_renderer.mesh_data.ubo_buffer[i],
+            ubo_size,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+        );
+    }
+
+    renderer_vk_create_buffer_memory(
+        staging_buffer,
+        &staging_memory,
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+    );
+
+    renderer_vk_create_buffer_memory(
+        g_renderer.mesh_data.vertex_buffer,
+        &g_renderer.mesh_data.vertex_memory,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    renderer_vk_create_buffer_memory(
+        g_renderer.mesh_data.index_buffer,
+        &g_renderer.mesh_data.index_memory,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    for (u32_t i = 0; i < RENDERER_FRAMES_IN_FLIGHT; i++)
+    {
+        renderer_vk_create_buffer_memory(
+            g_renderer.mesh_data.ubo_buffer[i],
+            &g_renderer.mesh_data.ubo_memory[i],
+            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+        );
+
+        VkResult vk_result = vkMapMemory(g_renderer.device, g_renderer.mesh_data.ubo_memory[i], 0, ubo_size, 0, &g_renderer.mesh_data.ubo_mapped[i]);
+        EMBER_ASSERT(vk_result == VK_SUCCESS);
+    }
+
+    void* data;
+    VkResult vk_result = vkMapMemory(g_renderer.device, staging_memory, 0, max_size, 0, &data);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
+
+    memcpy(data, vertices, vert_size);
+
+    renderer_vk_copy_buffer(staging_buffer, g_renderer.mesh_data.vertex_buffer, vert_size);
+
+    memcpy(data, indices, idx_size);
+
+    renderer_vk_copy_buffer(staging_buffer, g_renderer.mesh_data.index_buffer, idx_size);
+
+    vkUnmapMemory(g_renderer.device, staging_memory);
+    vkDestroyBuffer(g_renderer.device, staging_buffer, NULL);
+    vkFreeMemory(g_renderer.device, staging_memory, NULL);
+
+    g_renderer.mesh_data.indices_count = indices_count;
+}
+
+internal void
+renderer_vk_create_buffer(VkBuffer* buffer, VkDeviceSize size, VkBufferUsageFlags usage)
+{
+    VkBufferCreateInfo buffer_info = {0};
+    buffer_info.sType              = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buffer_info.flags              = 0;
+    buffer_info.usage              = usage;
+    buffer_info.size               = size;
+    buffer_info.sharingMode        = VK_SHARING_MODE_EXCLUSIVE;
+
+    VkResult vk_result = vkCreateBuffer(g_renderer.device, &buffer_info, NULL, buffer);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
+}
+
+internal void
+renderer_vk_create_buffer_memory(VkBuffer buffer, VkDeviceMemory* memory, VkMemoryPropertyFlags mem_flags)
+{
+    VkMemoryRequirements mem_req;
+    vkGetBufferMemoryRequirements(g_renderer.device, buffer, &mem_req);
+
+    u32_t memory_index = U32_MAX;
+    for (u32_t i = 0; i < g_renderer.device_mem_props.memoryTypeCount; i++)
+    {
+        b32_t type_check = mem_req.memoryTypeBits & (1 << i);
+        b32_t flag_check = (g_renderer.device_mem_props.memoryTypes[i].propertyFlags & mem_flags) == mem_flags;
+        if (type_check && flag_check)
+        {
+            memory_index = i;
+            break;
+        }
+    }
+
+    EMBER_ASSERT(memory_index != U32_MAX);
+
+    VkMemoryAllocateInfo alloc_info = {0};
+    alloc_info.sType                = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.allocationSize       = mem_req.size;
+    alloc_info.memoryTypeIndex      = memory_index;
+
+    VkResult vk_result = vkAllocateMemory(g_renderer.device, &alloc_info, NULL, memory);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
+
+    vkBindBufferMemory(g_renderer.device, buffer, *memory, 0);
+}
+
+internal void
+renderer_vk_copy_buffer(VkBuffer src, VkBuffer dst, VkDeviceSize size)
+{
+    VkCommandBufferAllocateInfo alloc_info = {0};
+    alloc_info.sType                       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    alloc_info.level                       = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    alloc_info.commandPool                 = g_renderer.command_pool;
+    alloc_info.commandBufferCount          = 1;
+
+    VkCommandBuffer cmd_buffer;
+    VkResult vk_result = vkAllocateCommandBuffers(g_renderer.device, &alloc_info, &cmd_buffer);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
+
+    VkCommandBufferBeginInfo begin_info = {0};
+    begin_info.sType                    = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin_info.flags                    = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(cmd_buffer, &begin_info);
+
+    VkBufferCopy copy_region = {0};
+    copy_region.size         = size;
+
+    vkCmdCopyBuffer(cmd_buffer, src, dst, 1, &copy_region);
+
+    vkEndCommandBuffer(cmd_buffer);
+
+    VkCommandBufferSubmitInfo cmd_buffer_info = {0};
+    cmd_buffer_info.sType                     = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    cmd_buffer_info.commandBuffer             = cmd_buffer;
+
+    VkSubmitInfo2 submit_info          = {0};
+    submit_info.sType                  = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos    = &cmd_buffer_info;
+
+    vkQueueSubmit2(g_renderer.graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vkQueueWaitIdle(g_renderer.graphics_queue);
+
+    vkFreeCommandBuffers(g_renderer.device, g_renderer.command_pool, 1, &cmd_buffer);
 }
 
 internal void
@@ -500,6 +750,45 @@ renderer_vk_pipeline_create_descriptor_set_layout(renderer_pipeline_t* pipeline)
 
     VkResult create_result = vkCreateDescriptorSetLayout(g_renderer.device, &binding_info, NULL, &pipeline->descriptor_set_layout);
     EMBER_ASSERT(create_result == VK_SUCCESS);
+}
+
+internal void
+renderer_vk_pipeline_create_descriptor_sets(renderer_pipeline_t* pipeline)
+{
+    VkDescriptorSetLayout layouts[RENDERER_FRAMES_IN_FLIGHT] = {
+        pipeline->descriptor_set_layout,
+        pipeline->descriptor_set_layout
+    };
+
+    VkDescriptorSetAllocateInfo alloc_info = {0};
+    alloc_info.sType                       = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    alloc_info.descriptorPool              = g_renderer.descriptor_pool;
+    alloc_info.descriptorSetCount          = RENDERER_FRAMES_IN_FLIGHT;
+    alloc_info.pSetLayouts                 = layouts;
+
+    VkResult vk_result = vkAllocateDescriptorSets(g_renderer.device, &alloc_info, pipeline->descriptor_sets);
+    EMBER_ASSERT(vk_result == VK_SUCCESS);
+
+    for (u32_t i = 0; i < RENDERER_FRAMES_IN_FLIGHT; i++)
+    {
+        VkDescriptorBufferInfo ubo_info = {0};
+        ubo_info.buffer                 = g_renderer.mesh_data.ubo_buffer[i];
+        ubo_info.offset                 = 0;
+        ubo_info.range                  = sizeof(renderer_vk_ubo_t);
+
+        VkWriteDescriptorSet write_set[1] = {0};
+        write_set[0].sType                = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write_set[0].dstSet               = pipeline->descriptor_sets[i];
+        write_set[0].dstBinding           = 0;
+        write_set[0].dstArrayElement      = 0;
+        write_set[0].descriptorCount      = 1;
+        write_set[0].descriptorType       = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        write_set[0].pImageInfo           = NULL;
+        write_set[0].pBufferInfo          = &ubo_info;
+        write_set[0].pTexelBufferView     = NULL;
+
+        vkUpdateDescriptorSets(g_renderer.device, ARRAY_COUNT(write_set), write_set, 0, NULL);
+    }
 }
 
 internal void
@@ -719,7 +1008,7 @@ renderer_vk_swapchain_recreate(platform_handle_t window_handle)
 
     vkDeviceWaitIdle(g_renderer.device);
 
-    for (u32_t i = 0; i < RENDERER_VK_SWAP_IMG_COUNT; i++)
+    for (u32_t i = 0; i < RENDERER_SWAP_IMG_COUNT; i++)
     {
         vkDestroyImageView(g_renderer.device, g_renderer.swapchain_img_views[i], NULL);
     }
@@ -914,22 +1203,23 @@ renderer_vk_command_buffer_record(renderer_pipeline_t* pipeline, u32_t buffer_id
     vkCmdSetScissor(cmd, 0, 1, &scissor);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->graphics_pipeline);
 
-    // vkCmdBindVertexBuffers();
-    // vkCmdBindIndexBuffers();
+    VkDeviceSize offsets[] = {0};
 
-    //vkCmdBindDescriptorSets(
-    //    cmd,
-    //    VK_PIPELINE_BIND_POINT_GRAPHICS,
-    //    pipeline->graphics_pipeline_layout,
-    //    0,
-    //    1,
-    //    0, // VkDescriptorSet*
-    //    0,
-    //    NULL
-    //);
+    vkCmdBindVertexBuffers(cmd, 0, 1, &g_renderer.mesh_data.vertex_buffer, offsets);
+    vkCmdBindIndexBuffer(cmd, g_renderer.mesh_data.index_buffer, 0, VK_INDEX_TYPE_UINT32);
 
-    // vkCmdDrawIndexed()
-    vkCmdDraw(cmd, 3, 1, 0, 0);
+    vkCmdBindDescriptorSets(
+        cmd,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        pipeline->graphics_pipeline_layout,
+        0,
+        1,
+        &pipeline->descriptor_sets[buffer_id],
+        0,
+        NULL
+    );
+
+    vkCmdDrawIndexed(cmd, g_renderer.mesh_data.indices_count, 1, 0, 0, 0);
 
     vkCmdEndRendering(cmd);
 

@@ -24,7 +24,7 @@ arena_init(arena_params_t* params)
         platform_mem_commit(address, commit);
     }
 
-    EMBER_ASSERT(address != 0)
+    EMBER_ASSERT(address != 0);
 
     if (address == 0)
     {

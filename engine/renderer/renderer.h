@@ -1,6 +1,9 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
+#define RENDERER_SWAP_IMG_COUNT 2
+#define RENDERER_FRAMES_IN_FLIGHT 2
+
 typedef struct renderer_t renderer_t;
 struct renderer_t;
 
