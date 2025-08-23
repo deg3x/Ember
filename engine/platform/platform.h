@@ -56,6 +56,8 @@ enum
     PLATFORM_FILE_FLAGS_share_w = (1 << 5),
 };
 
+#define FILE_READ_ALL U64_MAX
+
 typedef struct platform_file_props_t platform_file_props_t;
 struct platform_file_props_t
 {

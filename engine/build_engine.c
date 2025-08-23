@@ -27,7 +27,9 @@
 #include "math/matrix.h"
 #include "math/quaternion.h"
 #include "memory/arena.h"
+#include "containers/buffer.h"
 #include "input/input.h"
+#include "parsers/parser_json.h"
 
 #include "renderer/renderer.h"
 #if RHI_VULKAN
@@ -51,7 +53,9 @@
 #include "math/matrix.c"
 #include "math/quaternion.c"
 #include "memory/arena.c"
+#include "containers/buffer.c"
 #include "input/input.c"
+#include "parsers/parser_json.c"
 
 #include "renderer/renderer.c"
 #if RHI_VULKAN

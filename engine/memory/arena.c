@@ -90,6 +90,14 @@ arena_pop_to(arena_t* arena, u64_t pos)
     arena->position = pos;
 }
 
+internal u64_t
+arena_avail(arena_t* arena)
+{
+    u64_t result = arena->size_cmt - arena->position;
+
+    return result;
+}
+
 internal void
 arena_clear(arena_t* arena)
 {
